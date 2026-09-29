@@ -254,7 +254,7 @@ final class LensController {
         glass.blending = .transparent(opacity: .init(floatLiteral: 0.28))
         let flame = UnlitMaterial(color: UIColor(red: 1, green: 0.91, blue: 0.72, alpha: 1))
 
-        func part(_ mesh: MeshResource, _ material: some Material, at position: SIMD3<Float>) -> ModelEntity {
+        func part(_ mesh: MeshResource, _ material: some RealityKit.Material, at position: SIMD3<Float>) -> ModelEntity {
             let entity = ModelEntity(mesh: mesh, materials: [material])
             entity.position = position
             return entity

@@ -31,6 +31,7 @@ struct SpatialReferenceApp: App {
             }
             .environment(appModel)
         }
+        .defaultSize(width: 1280, height: 960)
 
         WindowGroup(id: appModel.teleportPortalWindowID) {
             PortalSceneView()

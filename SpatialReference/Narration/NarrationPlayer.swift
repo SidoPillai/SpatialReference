@@ -36,6 +36,8 @@ final class NarrationPlayer: NSObject, AVSpeechSynthesizerDelegate {
 
     private(set) var speed: Float = 1
     private(set) var voiceIndex = 0
+    /// Speech volume, 0...1.
+    private(set) var volume: Float = 0.7
     let voices: [AVSpeechSynthesisVoice]
 
     override init() {
@@ -96,6 +98,7 @@ final class NarrationPlayer: NSObject, AVSpeechSynthesizerDelegate {
         }
 
         let utterance = AVSpeechUtterance(string: source.substring(from: offset))
+        utterance.volume = volume
         utterance.rate = min(AVSpeechUtteranceMaximumSpeechRate, AVSpeechUtteranceDefaultSpeechRate * speed)
         if voices.indices.contains(voiceIndex) {
             utterance.voice = voices[voiceIndex]
@@ -140,6 +143,11 @@ final class NarrationPlayer: NSObject, AVSpeechSynthesizerDelegate {
     func cycleSpeed() {
         let index = Self.speeds.firstIndex(of: speed) ?? 0
         speed = Self.speeds[(index + 1) % Self.speeds.count]
+        restartAtCurrentWord()
+    }
+
+    func setVolume(_ newValue: Float) {
+        volume = min(1, max(0, newValue))
         restartAtCurrentWord()
     }
 

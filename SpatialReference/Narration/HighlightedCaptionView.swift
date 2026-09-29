@@ -13,11 +13,15 @@ struct HighlightedCaptionView: View {
     let highlightedRange: NSRange?
     var isNarrating: Bool = true
     var highlightColor = Color(red: 0.949, green: 0.784, blue: 0.475)
+    var fontSize: CGFloat = 27
+    var lineSpacing: CGFloat = 14
+    var alignment: TextAlignment = .leading
 
     var body: some View {
         Text(attributedString)
-            .font(.system(size: 27, design: .serif))
-            .lineSpacing(14)
+            .font(.system(size: fontSize, design: .serif))
+            .lineSpacing(lineSpacing)
+            .multilineTextAlignment(alignment)
             .fixedSize(horizontal: false, vertical: true)
     }
 

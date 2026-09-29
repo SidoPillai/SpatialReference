@@ -14,6 +14,7 @@ struct CoverGlow {
     let center: UnitPoint
     let radius: CGFloat
     let color: Color
+    var solid = false   // hard-edged disc instead of a fading glow
 }
 
 /// Cover art: gradient + glows (+ stars for the space story). Glows and stars
@@ -27,6 +28,10 @@ struct CoverArt: View {
                     for g in story.glows {
                         let center = CGPoint(x: size.width * g.center.x, y: size.height * g.center.y)
                         let r = g.radius * size.width
+                        if g.solid {
+                            ctx.fill(Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)), with: .color(g.color))
+                            continue
+                        }
                         ctx.fill(
                             Path(CGRect(origin: .zero, size: size)),
                             with: .radialGradient(
@@ -87,17 +92,17 @@ struct ExploreStory: Identifiable {
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0xE9B88A), Color(hex: 0xC7774B), Color(hex: 0x8A3F26), Color(hex: 0x4E2216)],
                 startPoint: .top, endPoint: .bottom)),
-            glows: [CoverGlow(center: UnitPoint(x: 0.75, y: 0.22), radius: 0.12, color: Color(hex: 0xFFE2B0))]
+            glows: [CoverGlow(center: UnitPoint(x: 0.75, y: 0.22), radius: 0.07, color: Color(hex: 0xFFE2B0), solid: true)]
         ),
         ExploreStory(
             title: "The Quiet Orbit", genre: "Space", minutes: 11,
             popularity: 92, added: 5, has3D: true, immersive: true,
             art: AnyShapeStyle(LinearGradient(
-                colors: [Color(hex: 0x05070F), Color(hex: 0x0B1533), Color(hex: 0x1A2D6B)],
+                colors: [Color(hex: 0x05070F), Color(hex: 0x05070F)],
                 startPoint: .top, endPoint: .bottom)),
             glows: [
-                CoverGlow(center: UnitPoint(x: 0.7, y: 0.7), radius: 0.9, color: Color(red: 0.27, green: 0.43, blue: 1).opacity(0.5)),
-                CoverGlow(center: UnitPoint(x: 0.3, y: 0.6), radius: 0.8, color: Color(red: 0.24, green: 0.78, blue: 0.67).opacity(0.28)),
+                CoverGlow(center: UnitPoint(x: 0.7, y: 0.7), radius: 0.8, color: Color(red: 0.27, green: 0.43, blue: 1).opacity(0.5)),
+                CoverGlow(center: UnitPoint(x: 0.3, y: 0.6), radius: 0.6, color: Color(red: 0.24, green: 0.78, blue: 0.67).opacity(0.28)),
             ],
             stars: true
         ),
@@ -563,7 +568,7 @@ struct ExploreView: View {
                         .foregroundStyle(.white.opacity(0.9))
                     Text(story.title)
                         .font(.system(size: 44, design: .serif))
-                        .lineSpacing(0)
+                        .lineSpacing(-6)
                         .frame(maxWidth: 460, alignment: .leading)
                         .multilineTextAlignment(.leading)
                     HStack(spacing: 10) {
@@ -616,6 +621,7 @@ struct ExploreView: View {
                         .foregroundStyle(.white.opacity(0.92))
                     Text(story.title)
                         .font(.system(size: 26, design: .serif))
+                        .lineSpacing(-3)
                         .multilineTextAlignment(.leading)
                 }
                 .padding(20)
@@ -657,7 +663,7 @@ struct CardHover: ViewModifier {
             .offset(y: on ? -6 : 0)
             .opacity(enabled ? 1 : 0.32)
             .saturation(enabled ? 1 : 0.3)
-            .hoverEffect()
+            .shadow(color: .black.opacity(on ? 0.45 : 0.18), radius: on ? 30 : 12, y: on ? 26 : 10)
             .onHover { inside in
                 if inside {
                     if enabled && hovered != id {
@@ -818,22 +824,25 @@ final class UISounds {
 struct LighthouseArt: View {
     var body: some View {
         Canvas { context, size in
-            let s = max(size.width / 600, size.height / 520)
             var ctx = context
-            ctx.translateBy(x: min(0, size.width - 600 * s), y: 0)
-            ctx.scaleBy(x: s, y: s)
+            // The design's featured card is ~628pt wide with this 600×520 SVG at
+            // its top-left; scale by width so the tower stays ~70% across.
+            let s = size.width / 628
 
-            // Sun glow
+            // Sun glow behind the lamp: 72%/36% of the card, radius 16% of the diagonal.
+            let glowCenter = CGPoint(x: size.width * 0.72, y: size.height * 0.36)
+            let glowR = 0.16 * hypot(size.width, size.height)
             ctx.fill(
-                Path(ellipseIn: CGRect(x: 432 - 96 + 0, y: 190 - 96 - 36, width: 192, height: 192)),
+                Path(ellipseIn: CGRect(x: glowCenter.x - glowR, y: glowCenter.y - glowR, width: glowR * 2, height: glowR * 2)),
                 with: .radialGradient(
-                    Gradient(colors: [Color(red: 1, green: 0.925, blue: 0.745).opacity(0.6), .clear]),
-                    center: CGPoint(x: 432, y: 106), startRadius: 0, endRadius: 96)
+                    Gradient(colors: [Color(red: 1, green: 0.925, blue: 0.745).opacity(0.6), Color(red: 1, green: 0.925, blue: 0.745).opacity(0)]),
+                    center: glowCenter, startRadius: 0, endRadius: glowR)
             )
+            ctx.scaleBy(x: s, y: s)
 
             // Light beam
             var beam = Path()
-            beam.addLines([CGPoint(x: 440, y: 190), CGPoint(x: 600, y: 40), CGPoint(x: 600, y: 210)])
+            beam.addLines([CGPoint(x: 440, y: 190), CGPoint(x: 900, y: -241), CGPoint(x: 900, y: 247)])
             beam.closeSubpath()
             ctx.fill(beam, with: .color(Color(red: 1, green: 0.933, blue: 0.784).opacity(0.18)))
 
@@ -841,9 +850,10 @@ struct LighthouseArt: View {
             var land = Path()
             land.move(to: CGPoint(x: 300, y: 300))
             land.addCurve(to: CGPoint(x: 470, y: 262), control1: CGPoint(x: 360, y: 260), control2: CGPoint(x: 420, y: 250))
-            land.addLine(to: CGPoint(x: 600, y: 272))
-            land.addLine(to: CGPoint(x: 600, y: 520))
-            land.addLine(to: CGPoint(x: 250, y: 520))
+            land.addLine(to: CGPoint(x: 900, y: 301))
+            // Runs past the SVG's 520pt height so taller cards don't show its bottom edge.
+            land.addLine(to: CGPoint(x: 900, y: 1200))
+            land.addLine(to: CGPoint(x: 250, y: 1200))
             land.closeSubpath()
             ctx.fill(land, with: .color(Color(red: 0.078, green: 0.106, blue: 0.129)))
 

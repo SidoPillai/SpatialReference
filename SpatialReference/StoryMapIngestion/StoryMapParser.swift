@@ -154,14 +154,16 @@ enum StoryMapParser {
         return SceneCamera(wkid: wkid, x: x, y: y, z: z, heading: heading, tilt: tilt)
     }
 
-    private static let namedHTMLEntities: [String: String] = [
+    private nonisolated static let namedHTMLEntities: [String: String] = [
         "&amp;": "&", "&apos;": "'", "&quot;": "\"", "&lt;": "<", "&gt;": ">", "&nbsp;": "\u{00A0}"
     ]
 
     /// Decodes the small set of HTML entities StoryMaps text nodes use
     /// (named entities plus numeric character references), without pulling
     /// in a full HTML parser for what is plain text with a few escapes.
-    private static func decodeHTMLEntities(_ string: String) -> String {
+    /// Pure string processing, so it's `nonisolated` to allow passing it as a
+    /// function reference (e.g. to `Optional.map`) without actor hops.
+    private nonisolated static func decodeHTMLEntities(_ string: String) -> String {
         guard string.contains("&") else { return string }
 
         var result = string

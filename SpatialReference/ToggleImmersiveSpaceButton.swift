@@ -7,7 +7,13 @@
 
 import SwiftUI
 
-struct ToggleImmersiveSpaceButton: View {
+struct ToggleImmersiveSpaceButton<Label: View>: View {
+
+    private let label: (_ isOpen: Bool) -> Label
+
+    init(@ViewBuilder label: @escaping (_ isOpen: Bool) -> Label) {
+        self.label = label
+    }
 
     @Environment(AppModel.self) private var appModel
 
@@ -49,10 +55,19 @@ struct ToggleImmersiveSpaceButton: View {
                 }
             }
         } label: {
-            Text(appModel.immersiveSpaceState == .open ? "Hide Immersive Space" : "Show Immersive Space")
+            label(appModel.immersiveSpaceState == .open)
         }
         .disabled(appModel.immersiveSpaceState == .inTransition)
         .animation(.none, value: 0)
         .fontWeight(.semibold)
+    }
+}
+
+extension ToggleImmersiveSpaceButton where Label == Text {
+    /// The default text-only toggle.
+    init() {
+        self.init { isOpen in
+            Text(isOpen ? "Hide Immersive Space" : "Show Immersive Space")
+        }
     }
 }

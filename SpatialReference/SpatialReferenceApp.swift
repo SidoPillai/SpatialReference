@@ -14,12 +14,19 @@ struct SpatialReferenceApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            StoryBrowserView()
                 .environment(appModel)
         }
 
+        WindowGroup(id: appModel.teleportPortalWindowID) {
+            PortalSceneView()
+                .environment(appModel)
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 1, height: 0.7, depth: 1, in: .meters)
+
         ImmersiveSpace(id: appModel.immersiveSpaceID) {
-            ImmersiveView()
+            AssetViewerImmersiveView()
                 .environment(appModel)
                 .onAppear {
                     appModel.immersiveSpaceState = .open
@@ -28,6 +35,6 @@ struct SpatialReferenceApp: App {
                     appModel.immersiveSpaceState = .closed
                 }
         }
-        .immersionStyle(selection: .constant(.full), in: .full)
+        .immersionStyle(selection: .constant(.mixed), in: .mixed)
     }
 }

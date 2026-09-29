@@ -14,8 +14,14 @@ struct SpatialReferenceApp: App {
 
     var body: some Scene {
         WindowGroup {
-            StoryBrowserView()
-                .environment(appModel)
+            Group {
+                if appModel.hasStarted {
+                    StoryBrowserView()
+                } else {
+                    WelcomeView { appModel.hasStarted = true }
+                }
+            }
+            .environment(appModel)
         }
 
         WindowGroup(id: appModel.teleportPortalWindowID) {

@@ -8,6 +8,39 @@ import SwiftUI
 
 /// Placeholder catalog entry for the Explore grid. Cover art is drawn from
 /// gradients until stories carry real thumbnails.
+/// Soft radial highlight layered over a cover gradient. Center and radius
+/// are fractions of the card (radius relative to the card's width).
+struct CoverGlow {
+    let center: UnitPoint
+    let radius: CGFloat
+    let color: Color
+}
+
+/// Cover art: gradient + glows (+ stars for the space story).
+struct CoverArt: View {
+    let story: ExploreStory
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                CoverArt(story: story)
+                ForEach(story.glows.indices, id: \.self) { i in
+                    let g = story.glows[i]
+                    Rectangle().fill(RadialGradient(
+                        colors: [g.color, g.color.opacity(0)],
+                        center: g.center, startRadius: 0, endRadius: g.radius * geo.size.width))
+                }
+                if story.stars {
+                    Canvas { ctx, size in
+                        for (x, y, d) in [(0.20, 0.30, 3.2), (0.70, 0.58, 2.4), (0.42, 0.78, 2.8), (0.86, 0.20, 2.4), (0.56, 0.14, 2.4), (0.12, 0.62, 2.0)] {
+                            ctx.fill(Path(ellipseIn: CGRect(x: size.width * x - d / 2, y: size.height * y - d / 2, width: d, height: d)), with: .color(.white))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct ExploreStory: Identifiable {
     let id = UUID()
     let title: String
@@ -18,6 +51,8 @@ struct ExploreStory: Identifiable {
     var has3D = false
     var immersive = false
     let art: AnyShapeStyle
+    var glows: [CoverGlow] = []
+    var stars = false
 
     static let featured = ExploreStory(
         title: "The Lighthouse Keeper’s Last Night",
@@ -40,35 +75,44 @@ struct ExploreStory: Identifiable {
             popularity: 88, added: 3, has3D: true, immersive: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x1F6B6A), Color(hex: 0x0C3A40), Color(hex: 0x061D22)],
-                startPoint: .top, endPoint: .bottom))
+                startPoint: .top, endPoint: .bottom)),
+            glows: [CoverGlow(center: UnitPoint(x: 0.5, y: -0.1), radius: 0.9, color: Color(hex: 0xBEF5E8).opacity(0.6))]
         ),
         ExploreStory(
             title: "Letters from the Rose City", genre: "History", minutes: 14,
             popularity: 64, added: 1, has3D: false, immersive: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0xE9B88A), Color(hex: 0xC7774B), Color(hex: 0x8A3F26), Color(hex: 0x4E2216)],
-                startPoint: .top, endPoint: .bottom))
+                startPoint: .top, endPoint: .bottom)),
+            glows: [CoverGlow(center: UnitPoint(x: 0.75, y: 0.22), radius: 0.12, color: Color(hex: 0xFFE2B0))]
         ),
         ExploreStory(
             title: "The Quiet Orbit", genre: "Space", minutes: 11,
             popularity: 92, added: 5, has3D: true, immersive: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x05070F), Color(hex: 0x0B1533), Color(hex: 0x1A2D6B)],
-                startPoint: .top, endPoint: .bottom))
+                startPoint: .top, endPoint: .bottom)),
+            glows: [
+                CoverGlow(center: UnitPoint(x: 0.7, y: 0.7), radius: 0.9, color: Color(red: 0.27, green: 0.43, blue: 1).opacity(0.5)),
+                CoverGlow(center: UnitPoint(x: 0.3, y: 0.6), radius: 0.8, color: Color(red: 0.24, green: 0.78, blue: 0.67).opacity(0.28)),
+            ],
+            stars: true
         ),
         ExploreStory(
             title: "The Clockwork Orchard", genre: "Fiction", minutes: 10,
             popularity: 71, added: 2, has3D: true, immersive: false,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x56642F), Color(hex: 0x2C3A1E), Color(hex: 0x1A2412)],
-                startPoint: .topLeading, endPoint: .bottomTrailing))
+                startPoint: .topLeading, endPoint: .bottomTrailing)),
+            glows: [CoverGlow(center: UnitPoint(x: 0.3, y: 0.3), radius: 0.8, color: Color(hex: 0xFFD68C).opacity(0.65))]
         ),
         ExploreStory(
             title: "Monsoon Market", genre: "Travel", minutes: 8,
             popularity: 57, added: 4, has3D: false, immersive: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x3D5A66), Color(hex: 0x2A3F4A), Color(hex: 0x1E2A30)],
-                startPoint: .top, endPoint: .bottom))
+                startPoint: .top, endPoint: .bottom)),
+            glows: [CoverGlow(center: UnitPoint(x: 0.5, y: 1), radius: 1.0, color: Color(hex: 0xFFAA50).opacity(0.6))]
         ),
     ]
 }
@@ -503,7 +547,7 @@ struct ExploreView: View {
         let story = ExploreStory.featured
         return Button(action: onOpenStory) {
             ZStack(alignment: .bottomLeading) {
-                Rectangle().fill(story.art)
+                CoverArt(story: story)
                 LighthouseArt()
                 LinearGradient(colors: [.clear, .black.opacity(0.62)], startPoint: .top, endPoint: .bottom)
                     .frame(height: 260)
@@ -558,7 +602,7 @@ struct ExploreView: View {
     private func storyCard(_ story: ExploreStory) -> some View {
         Button(action: onOpenStory) {
             ZStack(alignment: .bottomLeading) {
-                Rectangle().fill(story.art)
+                CoverArt(story: story)
                 LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom)
                     .frame(height: 150)
                     .frame(maxHeight: .infinity, alignment: .bottom)
@@ -773,6 +817,7 @@ struct LighthouseArt: View {
         Canvas { context, size in
             let s = max(size.width / 600, size.height / 520)
             var ctx = context
+            ctx.translateBy(x: min(0, size.width - 600 * s), y: 0)
             ctx.scaleBy(x: s, y: s)
 
             // Sun glow

@@ -5,31 +5,36 @@
 
 import SwiftUI
 
-/// Renders narration text with the word currently being spoken highlighted,
-/// dimming the rest.
+/// Renders narration text with the word currently being spoken highlighted.
+/// Words already spoken are bright, upcoming words are dimmed. When nothing is
+/// being narrated, the whole text is shown at full brightness.
 struct HighlightedCaptionView: View {
     let text: String
     let highlightedRange: NSRange?
+    var isNarrating: Bool = true
+    var highlightColor = Color(red: 0.949, green: 0.784, blue: 0.475)
 
     var body: some View {
         Text(attributedString)
-            .font(.title3)
+            .font(.system(size: 27, design: .serif))
+            .lineSpacing(14)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private var attributedString: AttributedString {
         var attributed = AttributedString(text)
-        attributed.foregroundColor = .secondary
+        attributed.foregroundColor = .white
 
-        guard let highlightedRange,
+        guard isNarrating, let highlightedRange,
               let stringRange = Range(highlightedRange, in: text),
               let lower = AttributedString.Index(stringRange.lowerBound, within: attributed),
               let upper = AttributedString.Index(stringRange.upperBound, within: attributed) else {
             return attributed
         }
 
-        attributed[lower..<upper].foregroundColor = .primary
-        attributed[lower..<upper].backgroundColor = .yellow.opacity(0.35)
+        attributed[upper..<attributed.endIndex].foregroundColor = .white.opacity(0.62)
+        attributed[lower..<upper].foregroundColor = Color(red: 0.118, green: 0.102, blue: 0.086)
+        attributed[lower..<upper].backgroundColor = highlightColor
         return attributed
     }
 }
@@ -40,4 +45,5 @@ struct HighlightedCaptionView: View {
         highlightedRange: NSRange(location: 4, length: 5)
     )
     .padding()
+    .background(.black)
 }

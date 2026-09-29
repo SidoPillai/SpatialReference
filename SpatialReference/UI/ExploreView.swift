@@ -311,7 +311,7 @@ struct ExploreView: View {
 
 /// Lighthouse silhouette for the featured card, drawn in the design's
 /// 600×520 coordinate space and scaled to fit.
-private struct LighthouseArt: View {
+struct LighthouseArt: View {
     var body: some View {
         Canvas { context, size in
             let s = max(size.width / 600, size.height / 520)

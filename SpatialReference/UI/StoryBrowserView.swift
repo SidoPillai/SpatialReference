@@ -24,6 +24,13 @@ struct StoryBrowserView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                Button {
+                    appModel.narrationPlayer.stop()
+                    appModel.screen = .explore
+                } label: {
+                    Label("Explore", systemImage: "chevron.left")
+                }
+
                 if let story = appModel.story {
                     Text(story.title).font(.largeTitle.bold())
 

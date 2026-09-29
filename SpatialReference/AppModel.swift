@@ -26,7 +26,7 @@ class AppModel {
     /// Milestone-1 demo story: Esri's public "Google photorealistic 3D
     /// basemap" StoryMap, picked for its real 3D scene camera viewpoints.
     let demoStoryItemID = "2f158b05b05644519fb4f5d51aa1c75f"
-    enum Screen { case welcome, signIn, browser }
+    enum Screen { case welcome, signIn, explore, browser }
     var screen = Screen.welcome
     var story: Story?
     var currentChapterIndex = 0

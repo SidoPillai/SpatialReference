@@ -21,8 +21,10 @@ struct SpatialReferenceApp: App {
                 case .signIn:
                     SignInView(
                         onBack: { appModel.screen = .welcome },
-                        onSignedIn: { appModel.screen = .browser }
+                        onSignedIn: { appModel.screen = .explore }
                     )
+                case .explore:
+                    ExploreView { appModel.screen = .browser }
                 case .browser:
                     StoryBrowserView()
                 }

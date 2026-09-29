@@ -193,6 +193,7 @@ struct ExploreView: View {
         .foregroundStyle(.white)
         // Click sound for any tap; simultaneous so buttons still receive it.
         .simultaneousGesture(TapGesture().onEnded { UISounds.shared.tap() })
+        .onAppear { UISounds.shared.warmUp() }
     }
 
     // MARK: - Section rail
@@ -306,7 +307,7 @@ struct ExploreView: View {
                 }
                 .padding(.leading, 8)
                 .padding(.trailing, 22)
-                .frame(minWidth: 240, minHeight: 52)
+                .frame(minWidth: 240, minHeight: 52, alignment: .leading)
                 .background(listening ? .white.opacity(0.26) : .black.opacity(0.18), in: Capsule())
                 .overlay(Capsule().strokeBorder(.white.opacity(listening ? 0.85 : 0), lineWidth: 2))
                 .shadow(color: Color(red: 1, green: 0.78, blue: 0.55).opacity(listening ? 0.35 : 0), radius: 12)
@@ -644,26 +645,40 @@ struct ExploreView: View {
     private var darkInk: Color { Color(red: 0.169, green: 0.141, blue: 0.118) }
 }
 
-/// Hover state for cards: lift, warm glow ring, and dimming when a card is
-/// excluded by the active filters.
+/// Hover treatment for cards: lift, warm glow ring with a rotating highlight
+/// and sparks, and dimming when a card is excluded by the active filters.
+///
+/// The visuals use system hover effects (grouped), so they respond to eye
+/// gaze on device — `onHover` isn't delivered for gaze on visionOS. `onHover`
+/// is kept only to trigger the chime when a pointer hovers.
 struct CardHover: ViewModifier {
     let id: String
     let radius: CGFloat
     @Binding var hovered: String?
     let enabled: Bool
 
-    private var on: Bool { enabled && hovered == id }
-
     func body(content: Content) -> some View {
         content
-            .overlay {
-                if on { HoverEffectOverlay(radius: radius) }
+            .hoverEffect(isEnabled: enabled) { effect, isActive, _ in
+                effect.animation(.easeOut(duration: 0.35)) {
+                    $0.scaleEffect(isActive ? 1.015 : 1)
+                        .offset(y: isActive ? -6 : 0)
+                }
             }
-            .scaleEffect(on ? 1.015 : 1)
-            .offset(y: on ? -6 : 0)
+            .overlay {
+                HoverEffectOverlay(radius: radius)
+                    .hoverEffect(isEnabled: enabled) { effect, isActive, _ in
+                        effect.animation(.easeOut(duration: 0.35)) {
+                            $0.opacity(isActive ? 1 : 0)
+                                .scaleEffect(isActive ? 1.015 : 1)
+                                .offset(y: isActive ? -6 : 0)
+                        }
+                    }
+            }
+            .hoverEffectGroup()
             .opacity(enabled ? 1 : 0.32)
             .saturation(enabled ? 1 : 0.3)
-            .shadow(color: .black.opacity(on ? 0.45 : 0.18), radius: on ? 30 : 12, y: on ? 26 : 10)
+            .shadow(color: .black.opacity(0.18), radius: 12, y: 10)
             .onHover { inside in
                 if inside {
                     if enabled && hovered != id {
@@ -672,7 +687,6 @@ struct CardHover: ViewModifier {
                     }
                 } else if hovered == id { hovered = nil }
             }
-            .animation(.easeOut(duration: 0.3), value: on)
             .animation(.easeOut(duration: 0.3), value: enabled)
     }
 }
@@ -700,10 +714,16 @@ struct HoverEffectOverlay: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius + 4)
         ZStack {
+            // Inset warm haze along the card's inner edge.
+            RoundedRectangle(cornerRadius: radius)
+                .strokeBorder(Color(red: 1, green: 0.824, blue: 0.588).opacity(0.25), lineWidth: 18)
+                .blur(radius: 9)
+                .clipShape(RoundedRectangle(cornerRadius: radius))
+                .padding(5)
             shape
                 .strokeBorder(Color(red: 1, green: 0.941, blue: 0.839).opacity(0.9), lineWidth: 2)
                 .shadow(color: Color(red: 1, green: 0.769, blue: 0.47).opacity(0.45), radius: 14)
-            TimelineView(.animation(paused: reduceMotion)) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 shape
                     .strokeBorder(
@@ -756,35 +776,43 @@ struct HoverEffectOverlay: View {
 
 /// Hover chime and click sounds. The chime is bundled; the click is
 /// synthesized (a short filtered noise burst over a falling sine).
-@MainActor
-final class UISounds {
+///
+/// AVAudioPlayer's prepare/play can activate the audio session synchronously,
+/// so all player work happens on a private serial queue, off the main thread.
+final class UISounds: @unchecked Sendable {
     static let shared = UISounds()
 
+    private let queue = DispatchQueue(label: "UISounds", qos: .userInteractive)
     private var chimePlayer: AVAudioPlayer?
     private var clickPlayer: AVAudioPlayer?
 
     private init() {
-        try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
-        if let url = Bundle.main.url(forResource: "hover-chime", withExtension: "mp3") {
-            chimePlayer = try? AVAudioPlayer(contentsOf: url)
-            chimePlayer?.volume = 0.1
-            chimePlayer?.prepareToPlay()
+        queue.async { [self] in
+            try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
+            if let url = Bundle.main.url(forResource: "hover-chime", withExtension: "mp3") {
+                chimePlayer = try? AVAudioPlayer(contentsOf: url)
+                chimePlayer?.volume = 0.1
+                chimePlayer?.prepareToPlay()
+            }
+            clickPlayer = try? AVAudioPlayer(data: Self.clickWAV())
+            clickPlayer?.volume = 0.5
+            clickPlayer?.prepareToPlay()
         }
-        clickPlayer = try? AVAudioPlayer(data: Self.clickWAV())
-        clickPlayer?.volume = 0.5
-        clickPlayer?.prepareToPlay()
     }
 
-    func chime() {
-        guard let chimePlayer else { return }
-        chimePlayer.currentTime = 0
-        chimePlayer.play()
-    }
+    /// Touch the singleton early so players are ready before the first hover.
+    func warmUp() {}
 
-    func tap() {
-        guard let clickPlayer else { return }
-        clickPlayer.currentTime = 0
-        clickPlayer.play()
+    func chime() { play(\.chimePlayer) }
+
+    func tap() { play(\.clickPlayer) }
+
+    private func play(_ player: KeyPath<UISounds, AVAudioPlayer?>) {
+        queue.async { [self] in
+            guard let p = self[keyPath: player] else { return }
+            p.currentTime = 0
+            p.play()
+        }
     }
 
     private static func clickWAV() -> Data {

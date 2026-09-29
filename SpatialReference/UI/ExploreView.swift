@@ -69,6 +69,13 @@ struct ExploreView: View {
 
     var onOpenStory: () -> Void
 
+    @Environment(AppModel.self) private var appModel
+
+    enum Section { case explore, library, profile }
+    @State private var section = Section.explore
+
+    private var session: ArcGISOnlineSession { appModel.arcGISSession }
+
     private let genres = ["All", "Fiction", "Nature", "History", "Space", "Travel"]
 
     @State private var genre = "All"
@@ -101,10 +108,10 @@ struct ExploreView: View {
 
     private var sectionRail: some View {
         VStack(spacing: 10) {
-            railButton("Explore", systemImage: "safari", selected: true)
-            railButton("Library", systemImage: "books.vertical")
+            railButton("Explore", systemImage: "safari", target: .explore)
+            railButton("Library", systemImage: "books.vertical", target: .library)
             railButton("Voices", systemImage: "waveform")
-            railButton("Profile", systemImage: "person")
+            railButton("Profile", systemImage: "person", target: .profile)
         }
         .padding(10)
         .frame(width: 72)
@@ -112,8 +119,11 @@ struct ExploreView: View {
         .overlay(Capsule().strokeBorder(.white.opacity(0.16), lineWidth: 1))
     }
 
-    private func railButton(_ label: String, systemImage: String, selected: Bool = false) -> some View {
-        Button {} label: {
+    private func railButton(_ label: String, systemImage: String, target: Section? = nil) -> some View {
+        let selected = target != nil && target == section
+        return Button {
+            if let target { section = target }
+        } label: {
             Image(systemName: systemImage)
                 .font(.system(size: 22, weight: .regular))
                 .frame(width: 52, height: 52)
@@ -129,10 +139,33 @@ struct ExploreView: View {
     // MARK: - Main panel
 
     private var mainPanel: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            header
-            genreChips
-            grid
+        Group {
+            switch section {
+            case .explore:
+                VStack(alignment: .leading, spacing: 24) {
+                    header
+                    genreChips
+                    grid
+                }
+            case .library:
+                accountPanel(
+                    title: "Library",
+                    icon: "books.vertical",
+                    signedOutHeadline: "Your stories live here",
+                    signedOutDetail: "Sign in to open the story maps you’ve authored and the private stories your organization has shared with you.",
+                    signedInHeadline: "Nothing here yet",
+                    signedInDetail: "Your stories and your organization’s stories will appear here."
+                )
+            case .profile:
+                accountPanel(
+                    title: "Profile",
+                    icon: "person.crop.circle",
+                    signedOutHeadline: "You’re browsing as a guest",
+                    signedOutDetail: "Sign in to sync bookmarks and narration progress, and to unlock your organization’s private stories.",
+                    signedInHeadline: signedInUsername ?? "Signed in",
+                    signedInDetail: "Bookmarks and narration progress sync to your ArcGIS account."
+                )
+            }
         }
         .padding(.top, 36)
         .padding([.horizontal, .bottom], 44)
@@ -209,6 +242,81 @@ struct ExploreView: View {
                             }
                         }
                     }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // MARK: - Account panels
+
+    private var signedInUsername: String? {
+        if case .signedIn(let name) = session.state { return name }
+        return nil
+    }
+
+    private func accountPanel(
+        title: String, icon: String,
+        signedOutHeadline: String, signedOutDetail: String,
+        signedInHeadline: String, signedInDetail: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.system(size: 44, weight: .regular, design: .serif))
+
+            VStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 48, weight: .light))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .accessibilityHidden(true)
+
+                if signedInUsername == nil {
+                    Text(signedOutHeadline)
+                        .font(.system(size: 32, design: .serif))
+                    Text(signedOutDetail)
+                        .font(.system(size: 18))
+                        .lineSpacing(4)
+                        .foregroundStyle(.white.opacity(0.84))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 480)
+
+                    Button {
+                        Task { await session.signIn() }
+                    } label: {
+                        HStack(spacing: 12) {
+                            if session.state == .signingIn {
+                                ProgressView().tint(darkInk)
+                            } else {
+                                Image(systemName: "globe").font(.system(size: 20))
+                            }
+                            Text(session.state == .signingIn ? "Signing in…" : "Sign in with ArcGIS")
+                                .font(.system(size: 19, weight: .semibold))
+                        }
+                        .foregroundStyle(darkInk)
+                        .frame(width: 360, height: 60)
+                        .background(Color(red: 0.965, green: 0.945, blue: 0.918), in: Capsule())
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect()
+                    .disabled(session.state == .signingIn)
+                    .padding(.top, 14)
+
+                    if case .failed(let message) = session.state {
+                        Text(message)
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color(red: 1, green: 0.78, blue: 0.72))
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 480)
+                    }
+                } else {
+                    Text(signedInHeadline)
+                        .font(.system(size: 32, design: .serif))
+                    Text(signedInDetail)
+                        .font(.system(size: 18))
+                        .foregroundStyle(.white.opacity(0.84))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 480)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -373,4 +481,5 @@ extension Color {
 
 #Preview(windowStyle: .automatic) {
     ExploreView(onOpenStory: {})
+        .environment(AppModel())
 }

@@ -16,28 +16,31 @@ struct CoverGlow {
     let color: Color
 }
 
-/// Cover art: gradient + glows (+ stars for the space story).
+/// Cover art: gradient + glows (+ stars for the space story). Glows and stars
+/// are drawn in a Canvas so they never influence layout.
 struct CoverArt: View {
     let story: ExploreStory
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                CoverArt(story: story)
-                ForEach(story.glows.indices, id: \.self) { i in
-                    let g = story.glows[i]
-                    Rectangle().fill(RadialGradient(
-                        colors: [g.color, g.color.opacity(0)],
-                        center: g.center, startRadius: 0, endRadius: g.radius * geo.size.width))
-                }
-                if story.stars {
-                    Canvas { ctx, size in
+        Rectangle().fill(story.art)
+            .overlay {
+                Canvas { ctx, size in
+                    for g in story.glows {
+                        let center = CGPoint(x: size.width * g.center.x, y: size.height * g.center.y)
+                        let r = g.radius * size.width
+                        ctx.fill(
+                            Path(CGRect(origin: .zero, size: size)),
+                            with: .radialGradient(
+                                Gradient(colors: [g.color, g.color.opacity(0)]),
+                                center: center, startRadius: 0, endRadius: r))
+                    }
+                    if story.stars {
                         for (x, y, d) in [(0.20, 0.30, 3.2), (0.70, 0.58, 2.4), (0.42, 0.78, 2.8), (0.86, 0.20, 2.4), (0.56, 0.14, 2.4), (0.12, 0.62, 2.0)] {
                             ctx.fill(Path(ellipseIn: CGRect(x: size.width * x - d / 2, y: size.height * y - d / 2, width: d, height: d)), with: .color(.white))
                         }
                     }
                 }
+                .allowsHitTesting(false)
             }
-        }
     }
 }
 

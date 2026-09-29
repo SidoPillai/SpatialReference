@@ -6,6 +6,10 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		27B5D98297451025B8AD3200 /* ArcGIS in Frameworks */ = {isa = PBXBuildFile; productRef = CB6FF07CB2BEB08914BF5BE1 /* ArcGIS */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		D0C5B04E306B2E3A0039A812 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -54,6 +58,7 @@
 		D0C5B033306B2E380039A812 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				27B5D98297451025B8AD3200 /* ArcGIS in Frameworks */,
 			);
 		};
 		D0C5B04A306B2E3A0039A812 /* Frameworks */ = {
@@ -99,6 +104,9 @@
 				D0C5B038306B2E380039A812 /* SpatialReference */,
 			);
 			name = SpatialReference;
+			packageProductDependencies = (
+				CB6FF07CB2BEB08914BF5BE1 /* ArcGIS */,
+			);
 			productName = SpatialReference;
 			productReference = D0C5B036306B2E380039A812 /* SpatialReference.app */;
 			productType = "com.apple.product-type.application";
@@ -152,6 +160,9 @@
 			);
 			mainGroup = D0C5B02D306B2E380039A812;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				35C1AE8D6A87DE0749C39F92 /* XCRemoteSwiftPackageReference "arcgis-maps-sdk-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D0C5B037306B2E380039A812 /* Products */;
 			projectDirPath = "";
@@ -451,6 +462,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		35C1AE8D6A87DE0749C39F92 /* XCRemoteSwiftPackageReference "arcgis-maps-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Esri/arcgis-maps-sdk-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 300.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CB6FF07CB2BEB08914BF5BE1 /* ArcGIS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 35C1AE8D6A87DE0749C39F92 /* XCRemoteSwiftPackageReference "arcgis-maps-sdk-swift" */;
+			productName = ArcGIS;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D0C5B02E306B2E380039A812 /* Project object */;
 	validationLevel = 1;

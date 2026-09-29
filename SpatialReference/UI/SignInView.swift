@@ -13,6 +13,7 @@ struct SignInView: View {
 
     var onBack: () -> Void
     var onSignedIn: () -> Void
+    var onSkip: () -> Void = {}
 
     private var session: ArcGISOnlineSession { appModel.arcGISSession }
 
@@ -21,7 +22,7 @@ struct SignInView: View {
             WarmBackdrop()
 
             card
-                .frame(width: 640, height: 640)
+                .frame(width: 640, height: 780)
                 .background(
                     Color(red: 104 / 255, green: 90 / 255, blue: 77 / 255).opacity(0.66),
                     in: RoundedRectangle(cornerRadius: 48)
@@ -66,7 +67,7 @@ struct SignInView: View {
                 .multilineTextAlignment(.center)
                 .padding(.top, 20)
 
-            Text("Your library, bookmarks and narration progress follow you into every space.")
+            Text("Bring your own stories into the room, at full scale.")
                 .font(.system(size: 18))
                 .lineSpacing(4)
                 .multilineTextAlignment(.center)
@@ -74,8 +75,11 @@ struct SignInView: View {
                 .frame(maxWidth: 440)
                 .padding(.top, 14)
 
+            benefits
+                .padding(.top, 26)
+
             signInButton
-                .padding(.top, 40)
+                .padding(.top, 30)
 
             Group {
                 if case .failed(let message) = session.state {
@@ -89,6 +93,9 @@ struct SignInView: View {
             .multilineTextAlignment(.center)
             .padding(.top, 16)
 
+            skipButton
+                .padding(.top, 10)
+
             Spacer(minLength: 0)
 
             HStack(spacing: 28) {
@@ -101,6 +108,44 @@ struct SignInView: View {
         .padding(.top, 32)
         .padding(.bottom, 40)
         .padding(.horizontal, 56)
+    }
+
+    private var benefits: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            benefit("person.crop.square", "Your stories", "Open the story maps you’ve authored.")
+            benefit("building.2", "Your organization’s", "Private and org-shared stories that public Explore can’t show.")
+            benefit("bookmark", "Pick up where you left off", "Bookmarks and narration progress follow you.")
+        }
+        .frame(width: 440, alignment: .leading)
+    }
+
+    private func benefit(_ icon: String, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 17, weight: .semibold))
+                Text(detail)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white.opacity(0.78))
+            }
+        }
+    }
+
+    private var skipButton: some View {
+        Button(action: onSkip) {
+            Text("Skip for now — explore public stories")
+                .font(.system(size: 17, weight: .medium))
+                .underline()
+                .frame(height: 44)
+                .padding(.horizontal, 20)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .hoverEffect()
+        .disabled(session.state == .signingIn)
     }
 
     private var signInButton: some View {
@@ -131,6 +176,6 @@ struct SignInView: View {
 }
 
 #Preview(windowStyle: .automatic) {
-    SignInView(onBack: {}, onSignedIn: {})
+    SignInView(onBack: {}, onSignedIn: {}, onSkip: {})
         .environment(AppModel())
 }

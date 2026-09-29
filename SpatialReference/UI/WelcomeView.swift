@@ -22,21 +22,23 @@ struct WelcomeView: View {
         ZStack {
             backdrop
 
-            VStack(spacing: 44) {
+            VStack(spacing: 0) {
                 hero
                 featureGrid
+                    .padding(.top, 36)
                 getStartedButton
+                    .padding(.top, 56)
             }
-            .padding(64)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 64)
+            .padding(.vertical, 56)
+            .fixedSize()
             .background(panelFill, in: RoundedRectangle(cornerRadius: 48))
             .overlay(
                 RoundedRectangle(cornerRadius: 48)
                     .strokeBorder(.white.opacity(0.16), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.35), radius: 45, y: 40)
-            .padding(.horizontal, 64)
-            .padding(.vertical, 56)
+            .padding(48)
         }
         .foregroundStyle(.white)
     }
@@ -103,13 +105,14 @@ struct WelcomeView: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .hoverEffect()
+        .contentShape(.hoverEffect, Capsule())
+        .hoverEffect(.lift)
     }
 
     // MARK: - Backgrounds
 
     private var panelFill: Color {
-        Color(red: 104 / 255, green: 90 / 255, blue: 77 / 255).opacity(0.62)
+        Color(red: 104 / 255, green: 90 / 255, blue: 77 / 255).opacity(0.32)
     }
 
     private var backdrop: some View { WarmBackdrop() }

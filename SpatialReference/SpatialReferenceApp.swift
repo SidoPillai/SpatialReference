@@ -17,13 +17,7 @@ struct SpatialReferenceApp: App {
             Group {
                 switch appModel.screen {
                 case .welcome:
-                    WelcomeView { appModel.screen = .signIn }
-                case .signIn:
-                    SignInView(
-                        onBack: { appModel.screen = .welcome },
-                        onSignedIn: { appModel.screen = .explore },
-                        onSkip: { appModel.screen = .explore }
-                    )
+                    WelcomeView { appModel.screen = .explore }
                 case .explore:
                     ExploreView { appModel.screen = .browser }
                 case .browser:

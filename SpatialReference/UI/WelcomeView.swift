@@ -112,7 +112,13 @@ struct WelcomeView: View {
         Color(red: 104 / 255, green: 90 / 255, blue: 77 / 255).opacity(0.62)
     }
 
-    private var backdrop: some View {
+    private var backdrop: some View { WarmBackdrop() }
+}
+
+/// Shared warm gradient backdrop used by the welcome and sign-in screens.
+struct WarmBackdrop: View {
+
+    var body: some View {
         ZStack {
             LinearGradient(
                 stops: [
@@ -141,7 +147,13 @@ struct WelcomeView: View {
 }
 
 /// Wireframe globe with an orbiting dot, drawn to match the design's SVG.
-private struct GlobeView: View {
+struct GlobeView: View {
+
+    var gridOpacity = 0.34
+    var gridLineWidth: CGFloat = 0.6
+    var orbitOpacity = 0.6
+    var orbitLineWidth: CGFloat = 0.8
+    var dotRadius: CGFloat = 3.2
 
     private let orbitPeriod: Double = 14
 
@@ -173,8 +185,8 @@ private struct GlobeView: View {
     private func drawGlobe(_ context: inout GraphicsContext) {
         var ctx = context
         rotated(&ctx, degrees: -20)
-        let stroke = GraphicsContext.Shading.color(.white.opacity(0.34))
-        let style = StrokeStyle(lineWidth: 0.6)
+        let stroke = GraphicsContext.Shading.color(.white.opacity(gridOpacity))
+        let style = StrokeStyle(lineWidth: gridLineWidth)
 
         for path in [
             ellipse(cx: 100, cy: 100, rx: 70, ry: 70),
@@ -201,15 +213,15 @@ private struct GlobeView: View {
 
         ctx.stroke(
             ellipse(cx: 100, cy: 100, rx: 96, ry: 26),
-            with: .color(.white.opacity(0.6)),
-            style: StrokeStyle(lineWidth: 0.8)
+            with: .color(.white.opacity(orbitOpacity)),
+            style: StrokeStyle(lineWidth: orbitLineWidth)
         )
 
         // Dot starts at the left vertex (4,100) and travels the ellipse.
         let angle = Double.pi + phase * 2 * .pi
         let dot = CGPoint(x: 100 + 96 * cos(angle), y: 100 + 26 * sin(angle))
         ctx.fill(
-            Path(ellipseIn: CGRect(x: dot.x - 3.2, y: dot.y - 3.2, width: 6.4, height: 6.4)),
+            Path(ellipseIn: CGRect(x: dot.x - dotRadius, y: dot.y - dotRadius, width: dotRadius * 2, height: dotRadius * 2)),
             with: .color(Color(red: 1, green: 0.914, blue: 0.722))
         )
     }

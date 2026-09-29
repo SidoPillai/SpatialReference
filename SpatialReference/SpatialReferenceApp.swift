@@ -15,10 +15,16 @@ struct SpatialReferenceApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if appModel.hasStarted {
+                switch appModel.screen {
+                case .welcome:
+                    WelcomeView { appModel.screen = .signIn }
+                case .signIn:
+                    SignInView(
+                        onBack: { appModel.screen = .welcome },
+                        onSignedIn: { appModel.screen = .browser }
+                    )
+                case .browser:
                     StoryBrowserView()
-                } else {
-                    WelcomeView { appModel.hasStarted = true }
                 }
             }
             .environment(appModel)

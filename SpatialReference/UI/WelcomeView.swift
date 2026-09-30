@@ -160,8 +160,11 @@ struct GlobeView: View {
 
     private let orbitPeriod: Double = 14
 
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some View {
-        TimelineView(.animation) { timeline in
+        // Paused while backgrounded so no GPU work is submitted then.
+        TimelineView(.animation(paused: scenePhase != .active)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 let s = size.width / 200

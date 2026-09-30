@@ -48,16 +48,27 @@ enum StoryMapParser {
         let title = coverData?["title"] as? String ?? "Untitled Story"
         let summary = coverData?["summary"] as? String ?? ""
 
-        // Walk the story's top-level children looking for "immersive"
-        // (sidecar) sections, and flatten all of their slides in order.
+        // Walk the story's top-level children in order. "immersive" (sidecar)
+        // sections contribute one chapter per slide; gallery blocks
+        // contribute one carousel chapter each.
         let topLevelChildren = storyNode["children"] as? [String] ?? []
         var chapters: [Chapter] = []
         for childID in topLevelChildren {
-            guard let node = nodes[childID], node["type"] as? String == "immersive" else { continue }
-            let slideIDs = node["children"] as? [String] ?? []
-            for slideID in slideIDs {
-                guard let slideNode = nodes[slideID] else { continue }
-                chapters.append(makeChapter(id: slideID, slideNode: slideNode, nodes: nodes, resources: resources))
+            guard let node = nodes[childID], let type = node["type"] as? String else { continue }
+            switch type {
+            case "immersive":
+                let slideIDs = node["children"] as? [String] ?? []
+                for slideID in slideIDs {
+                    guard let slideNode = nodes[slideID] else { continue }
+                    chapters.append(makeChapter(id: slideID, slideNode: slideNode, nodes: nodes, resources: resources))
+                }
+            case "gallery":
+                let items = makeGalleryItems(galleryNode: node, nodes: nodes, resources: resources)
+                if !items.isEmpty {
+                    chapters.append(Chapter(id: childID, narrationText: "", media: .gallery(items: items)))
+                }
+            default:
+                continue
             }
         }
 
@@ -86,6 +97,62 @@ enum StoryMapParser {
 
         let narrationText = decodeHTMLEntities(narrationParts.joined(separator: " "))
         return Chapter(id: id, narrationText: narrationText, media: media)
+    }
+
+    /// Builds carousel items from a gallery block's image children.
+    ///
+    /// A gallery child is an `image` node whose `data.image` points at a
+    /// still-image resource. When the child also has `config.resourceId`
+    /// pointing at a `usdz` resource, the child is really a 3D model and the
+    /// still image is just its poster.
+    private static func makeGalleryItems(
+        galleryNode: [String: Any],
+        nodes: [String: [String: Any]],
+        resources: [String: [String: Any]]
+    ) -> [GalleryItem] {
+        var items: [GalleryItem] = []
+        for childID in galleryNode["children"] as? [String] ?? [] {
+            guard let child = nodes[childID], child["type"] as? String == "image" else { continue }
+            let data = child["data"] as? [String: Any]
+            let caption = (data?["caption"] as? String).map(decodeHTMLEntities).flatMap { $0.isEmpty ? nil : $0 }
+            let posterName = itemResourceName(resources[data?["image"] as? String ?? ""], ofTypes: ["image"])
+
+            let config = child["config"] as? [String: Any]
+            if let modelResourceID = config?["resourceId"] as? String,
+               let modelName = itemResourceName(resources[modelResourceID], ofTypes: ["usdz", "reality"]) {
+                items.append(GalleryItem(
+                    id: childID,
+                    kind: .model(resourceName: modelName),
+                    posterResourceName: posterName,
+                    title: caption ?? displayName(forResource: modelName)
+                ))
+            } else if let posterName {
+                items.append(GalleryItem(
+                    id: childID,
+                    kind: .image(resourceName: posterName),
+                    posterResourceName: nil,
+                    title: caption ?? "Image"
+                ))
+            }
+        }
+        return items
+    }
+
+    /// The item-resource filename of an `item-resource`-provider resource of
+    /// one of the given types, or nil when it's some other kind of resource.
+    private static func itemResourceName(_ resource: [String: Any]?, ofTypes types: [String]) -> String? {
+        guard let resource, let type = resource["type"] as? String, types.contains(type),
+              let data = resource["data"] as? [String: Any],
+              data["provider"] as? String ?? "item-resource" == "item-resource" else { return nil }
+        return data["resourceId"] as? String
+    }
+
+    /// "space-cosmonaut_v2.zip" -> "Space Cosmonaut V2".
+    private static func displayName(forResource name: String) -> String {
+        let base = (name as NSString).deletingPathExtension
+        return base
+            .replacingOccurrences(of: "[-_]+", with: " ", options: .regularExpression)
+            .capitalized
     }
 
     /// Recursively collects `text` node contents beneath a narrative panel.

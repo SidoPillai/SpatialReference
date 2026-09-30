@@ -28,6 +28,28 @@ enum ChapterMedia: Codable, Equatable {
     case image(resourceName: String, caption: String?)
     /// An embedded external link (e.g. another story, an experience app).
     case embed(url: URL, title: String?)
+    /// A StoryMaps gallery block, shown as a carousel of images and 3D models.
+    case gallery(items: [GalleryItem])
+}
+
+/// One page of a gallery carousel.
+struct GalleryItem: Codable, Equatable, Identifiable {
+    enum Kind: Codable, Equatable {
+        /// A plain picture, referenced by its item-resource filename.
+        case image(resourceName: String)
+        /// A 3D model. `resourceName` is the item resource holding the
+        /// model: StoryMaps stores these as a `.zip` wrapping the `.usdz`
+        /// (or occasionally the bare `.usdz`).
+        case model(resourceName: String)
+    }
+
+    /// The gallery child's node id.
+    var id: String
+    var kind: Kind
+    /// Item-resource filename of a still image to show while a model
+    /// downloads (and as its thumbnail).
+    var posterResourceName: String?
+    var title: String
 }
 
 /// A 3D camera viewpoint captured from a StoryMap's immersive web scene,

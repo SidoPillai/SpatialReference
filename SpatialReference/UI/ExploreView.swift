@@ -194,6 +194,10 @@ struct ExploreView: View {
         // Click sound for any tap; simultaneous so buttons still receive it.
         .simultaneousGesture(TapGesture().onEnded { UISounds.shared.tap() })
         .onAppear { UISounds.shared.warmUp() }
+        // Load the user's own (including private) StoryMaps once signed in.
+        .task(id: signedInUsername) {
+            if signedInUsername != nil { await appModel.refreshLibrary() }
+        }
     }
 
     // MARK: - Section rail
@@ -239,6 +243,8 @@ struct ExploreView: View {
                     genreChips.padding(.bottom, 20)
                     grid
                 }
+            case .library where signedInUsername != nil:
+                libraryPanel
             case .library:
                 accountPanel(
                     title: "Library",
@@ -550,6 +556,121 @@ struct ExploreView: View {
         }
     }
 
+    // MARK: - Library
+
+    private var libraryPanel: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack {
+                Text("Library")
+                    .font(.system(size: 44, weight: .regular, design: .serif))
+                Spacer()
+                Button {
+                    Task { await appModel.refreshLibrary() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 20, weight: .semibold))
+                        .frame(width: 52, height: 52)
+                        .background(.white.opacity(0.14), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect()
+                .disabled(appModel.libraryState == .loading)
+                .accessibilityLabel("Refresh library")
+            }
+
+            if let error = appModel.openStoryError {
+                Text(error)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color(red: 1, green: 0.78, blue: 0.72))
+            }
+
+            Group {
+                if case .failed(let message) = appModel.libraryState {
+                    VStack(spacing: 12) {
+                        Label("Couldn’t load your stories", systemImage: "exclamationmark.triangle")
+                            .font(.system(size: 22, weight: .semibold))
+                        Text(message)
+                            .font(.system(size: 15))
+                            .foregroundStyle(.white.opacity(0.84))
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 480)
+                    }
+                } else if appModel.libraryItems.isEmpty && appModel.libraryState != .loaded {
+                    ProgressView("Loading your stories…")
+                } else if appModel.libraryItems.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "books.vertical")
+                            .font(.system(size: 48, weight: .light))
+                        Text("Nothing here yet").font(.system(size: 32, design: .serif))
+                        Text("Story maps you author in ArcGIS StoryMaps will appear here.")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.white.opacity(0.84))
+                    }
+                } else {
+                    ScrollView {
+                        // Generous gaps and edge padding leave room for the
+                        // hover lift and glow, which the scroll view would
+                        // otherwise clip or crowd into neighbouring tiles.
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 36)], spacing: 36) {
+                            ForEach(appModel.libraryItems) { libraryCard($0) }
+                        }
+                        .padding(20)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func libraryCard(_ item: ArcGISOnlineSession.StoryMapItem) -> some View {
+        let opening = appModel.openingStoryID == item.id
+        return Button {
+            Task {
+                if await appModel.openLibraryStory(itemID: item.id) { onOpenStory() }
+            }
+        } label: {
+            ZStack(alignment: .bottomLeading) {
+                Rectangle().fill(LinearGradient(
+                    colors: [Color(hex: 0x3D5A66), Color(hex: 0x1E2A30)], startPoint: .top, endPoint: .bottom))
+                if let url = item.thumbnailURL {
+                    AsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        Color.clear
+                    }
+                }
+                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 150)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.access == "public" ? "Story map" : "Story map · \(item.access)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .textCase(.uppercase)
+                        .tracking(1.8)
+                        .foregroundStyle(.white.opacity(0.92))
+                    Text(item.title)
+                        .font(.system(size: 24, design: .serif))
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                }
+                .padding(20)
+                if opening {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(.black.opacity(0.45))
+                }
+            }
+            .frame(height: 240)
+            .clipShape(RoundedRectangle(cornerRadius: 28))
+            .contentShape(RoundedRectangle(cornerRadius: 28))
+        }
+        .buttonStyle(.plain)
+        .modifier(CardHover(id: item.id, radius: 28, hovered: $hovered, enabled: true))
+        .disabled(appModel.openingStoryID != nil)
+        .accessibilityLabel("\(item.title), \(item.access) story map")
+    }
+
     // MARK: - Cards
 
     private var featuredCard: some View {
@@ -710,6 +831,7 @@ struct HoverEffectOverlay: View {
     private static let sparkDuration = 2.2
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius + 4)
@@ -723,7 +845,9 @@ struct HoverEffectOverlay: View {
             shape
                 .strokeBorder(Color(red: 1, green: 0.941, blue: 0.839).opacity(0.9), lineWidth: 2)
                 .shadow(color: Color(red: 1, green: 0.769, blue: 0.47).opacity(0.45), radius: 14)
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
+            // Paused off-screen: submitting GPU work while backgrounded (e.g. during
+            // the sign-in web sheet) makes Metal log "Insufficient Permission".
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active)) { timeline in
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 shape
                     .strokeBorder(

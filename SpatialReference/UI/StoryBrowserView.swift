@@ -55,7 +55,11 @@ struct StoryBrowserView: View {
         VStack(alignment: .leading, spacing: 24) {
             header
 
-            if let chapter = appModel.currentChapter {
+            if let chapter = appModel.currentChapter, let story = appModel.story, case .gallery(let items) = chapter.media {
+                GalleryCarouselView(itemID: story.itemID, items: items)
+                    .id(chapter.id)
+                    .frame(maxHeight: .infinity)
+            } else if let chapter = appModel.currentChapter {
                 HStack(alignment: .top, spacing: 44) {
                     VStack(spacing: 16) {
                         if let media = chapter.media {
@@ -182,6 +186,9 @@ struct StoryBrowserView: View {
             mediaCardBody(badge: "Image", title: caption ?? resourceName, subtitle: nil, actionTitle: nil, actionIcon: nil)
         case .embed(let url, let title):
             mediaCardBody(badge: "Link", title: title ?? url.absoluteString, subtitle: nil, actionTitle: nil, actionIcon: nil)
+        case .gallery(let items):
+            // Galleries are shown as a carousel in the main panel instead.
+            mediaCardBody(badge: "Gallery", title: "\(items.count) items", subtitle: nil, actionTitle: nil, actionIcon: nil)
         }
     }
 

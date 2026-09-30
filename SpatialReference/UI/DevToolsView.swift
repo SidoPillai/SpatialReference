@@ -114,12 +114,7 @@ struct DevToolsView: View {
         Task {
             defer { isFetching = false }
             do {
-                let json = try await appModel.arcGISSession.fetchResource(itemID: storyItemID, resourceName: "published_data.json")
-                guard let data = json.data(using: .utf8) else { return }
-                let story = try StoryMapParser.parse(data: data, itemID: storyItemID)
-                StoryCache.save(story)
-                appModel.story = story
-                appModel.currentChapterIndex = 0
+                try await appModel.loadStory(itemID: storyItemID)
                 resourceOutput = ""
             } catch {
                 parseError = "Error: \(error.localizedDescription)"

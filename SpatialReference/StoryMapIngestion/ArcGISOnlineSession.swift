@@ -68,11 +68,66 @@ final class ArcGISOnlineSession {
         )
     }
 
+    /// Fetches a named resource from a portal item as raw bytes (e.g. an
+    /// image, or the `.zip` a StoryMaps 3D model is stored as).
+    func fetchResourceData(itemID: String, resourceName: String) async throws -> Data {
+        try await fetchData(
+            path: "sharing/rest/content/items/\(itemID)/resources/\(resourceName)",
+            extraQueryItems: []
+        )
+    }
+
+    /// The signed-in user's StoryMaps, newest first — including private ones,
+    /// which the search API only returns because the request is authenticated.
+    func listMyStoryMaps() async throws -> [StoryMapItem] {
+        guard case .signedIn(let username) = state else { throw SessionError.notSignedIn }
+        let token = try await accessToken()
+
+        let data = try await fetchData(
+            path: "sharing/rest/search",
+            extraQueryItems: [
+                URLQueryItem(name: "f", value: "json"),
+                URLQueryItem(name: "q", value: "owner:\"\(username)\" AND type:\"StoryMap\""),
+                URLQueryItem(name: "sortField", value: "modified"),
+                URLQueryItem(name: "sortOrder", value: "desc"),
+                URLQueryItem(name: "num", value: "100"),
+            ],
+            token: token
+        )
+        let response = try JSONDecoder().decode(SearchResponse.self, from: data)
+        return response.results.map { result in
+            StoryMapItem(
+                id: result.id,
+                title: result.title,
+                summary: result.snippet ?? "",
+                modified: result.modified.map { Date(timeIntervalSince1970: $0 / 1000) },
+                access: result.access ?? "private",
+                thumbnailURL: result.thumbnail.flatMap { thumbnail in
+                    var components = URLComponents(
+                        url: portalURL.appendingPathComponent("sharing/rest/content/items/\(result.id)/info/\(thumbnail)"),
+                        resolvingAgainstBaseURL: false
+                    )
+                    components?.queryItems = [URLQueryItem(name: "token", value: token)]
+                    return components?.url
+                }
+            )
+        }
+    }
+
     private func fetchRawJSON(path: String, extraQueryItems: [URLQueryItem]) async throws -> String {
+        let data = try await fetchData(path: path, extraQueryItems: extraQueryItems)
+        return String(data: data, encoding: .utf8) ?? "<\(data.count) bytes of binary data>"
+    }
+
+    private func accessToken() async throws -> String {
         guard let credential = ArcGISEnvironment.authenticationManager.arcGISCredentialStore.credential(for: portalURL) as? OAuthUserCredential else {
             throw SessionError.notSignedIn
         }
-        let token = try await credential.tokenInfo.accessToken
+        return try await credential.tokenInfo.accessToken
+    }
+
+    private func fetchData(path: String, extraQueryItems: [URLQueryItem], token: String? = nil) async throws -> Data {
+        let token = if let token { token } else { try await accessToken() }
 
         var components = URLComponents(url: portalURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         components.queryItems = extraQueryItems + [URLQueryItem(name: "token", value: token)]
@@ -81,7 +136,30 @@ final class ArcGISOnlineSession {
         if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
             throw SessionError.httpError(httpResponse.statusCode, String(data: data, encoding: .utf8) ?? "")
         }
-        return String(data: data, encoding: .utf8) ?? "<\(data.count) bytes of binary data>"
+        return data
+    }
+
+    private struct SearchResponse: Decodable {
+        struct Result: Decodable {
+            let id: String
+            let title: String
+            let snippet: String?
+            let modified: Double?
+            let access: String?
+            let thumbnail: String?
+        }
+        let results: [Result]
+    }
+
+    /// A StoryMap item listed in the user's library.
+    struct StoryMapItem: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let summary: String
+        let modified: Date?
+        /// "private", "shared", "org" or "public".
+        let access: String
+        let thumbnailURL: URL?
     }
 
     enum SessionError: LocalizedError {

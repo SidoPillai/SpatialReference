@@ -31,6 +31,66 @@ class AppModel {
     var story: Story?
     var currentChapterIndex = 0
 
+    // MARK: - Library (the signed-in user's StoryMaps)
+
+    enum LibraryState: Equatable {
+        case idle
+        case loading
+        case loaded
+        case failed(String)
+    }
+
+    private(set) var libraryItems: [ArcGISOnlineSession.StoryMapItem] = []
+    private(set) var libraryState = LibraryState.idle
+    /// The library story currently being downloaded and parsed, if any.
+    private(set) var openingStoryID: String?
+    var openStoryError: String?
+
+    func refreshLibrary() async {
+        guard libraryState != .loading else { return }
+        libraryState = .loading
+        do {
+            libraryItems = try await arcGISSession.listMyStoryMaps()
+            libraryState = .loaded
+        } catch {
+            libraryState = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Downloads, parses and caches a story, then makes it the current one.
+    /// Prefers the published JSON; a never-published story only has a draft.
+    func loadStory(itemID: String) async throws {
+        var lastError: Error?
+        for resourceName in ["published_data.json", "draft.json"] {
+            do {
+                let json = try await arcGISSession.fetchResource(itemID: itemID, resourceName: resourceName)
+                let story = try StoryMapParser.parse(data: Data(json.utf8), itemID: itemID)
+                StoryCache.save(story)
+                self.story = story
+                currentChapterIndex = 0
+                return
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError ?? CancellationError()
+    }
+
+    /// Opens a library story in the reader; returns whether it succeeded.
+    func openLibraryStory(itemID: String) async -> Bool {
+        guard openingStoryID == nil else { return false }
+        openingStoryID = itemID
+        openStoryError = nil
+        defer { openingStoryID = nil }
+        do {
+            try await loadStory(itemID: itemID)
+            return true
+        } catch {
+            openStoryError = error.localizedDescription
+            return false
+        }
+    }
+
     var currentChapter: Chapter? {
         guard let story, story.chapters.indices.contains(currentChapterIndex) else { return nil }
         return story.chapters[currentChapterIndex]

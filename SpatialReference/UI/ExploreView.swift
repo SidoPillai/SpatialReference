@@ -129,7 +129,7 @@ enum ExploreSort: String, CaseIterable {
     case popular = "Popular", newest = "Newest", oldest = "Oldest"
 }
 
-/// Explore screen: section rail, voice search, sort/filter menu, genre chips
+/// Explore screen: section tab ornament, voice search, sort/filter menu, genre chips
 /// and a featured story beside a grid of story cards.
 struct ExploreView: View {
 
@@ -179,18 +179,20 @@ struct ExploreView: View {
     }
 
     var body: some View {
-        ZStack {
-            WarmBackdrop()
-
-            HStack(alignment: .center, spacing: 24) {
-                sectionRail
-                mainPanel
+        // On visionOS a TabView renders as a leading ornament that expands to
+        // show tab names while the user looks at it and collapses when they
+        // look away. The system drives this, as apps never receive gaze data.
+        TabView(selection: $section) {
+            Tab("Explore", systemImage: "safari", value: Section.explore) {
+                sectionPage(.explore)
             }
-            .padding(.leading, 28)
-            .padding(.trailing, 40)
-            .padding(.vertical, 56)
+            Tab("Library", systemImage: "books.vertical", value: Section.library) {
+                sectionPage(.library)
+            }
+            Tab("Profile", systemImage: "person", value: Section.profile) {
+                sectionPage(.profile)
+            }
         }
-        .foregroundStyle(.white)
         // Click sound for any tap; simultaneous so buttons still receive it.
         .simultaneousGesture(TapGesture().onEnded { UISounds.shared.tap() })
         .onAppear { UISounds.shared.warmUp() }
@@ -200,41 +202,19 @@ struct ExploreView: View {
         }
     }
 
-    // MARK: - Section rail
-
-    private var sectionRail: some View {
-        VStack(spacing: 10) {
-            railButton("Explore", systemImage: "safari", target: .explore)
-            railButton("Library", systemImage: "books.vertical", target: .library)
-            railButton("Voices", systemImage: "waveform")
-            railButton("Profile", systemImage: "person", target: .profile)
+    private func sectionPage(_ section: Section) -> some View {
+        ZStack {
+            WarmBackdrop()
+            mainPanel(for: section)
+                .padding(.horizontal, 40)
+                .padding(.vertical, 56)
         }
-        .padding(10)
-        .frame(width: 72)
-        .background(panelFill, in: Capsule())
-        .overlay(Capsule().strokeBorder(.white.opacity(0.16), lineWidth: 1))
-    }
-
-    private func railButton(_ label: String, systemImage: String, target: Section? = nil) -> some View {
-        let selected = target != nil && target == section
-        return Button {
-            if let target { section = target }
-        } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 22, weight: .regular))
-                .frame(width: 52, height: 52)
-                .background(selected ? .white.opacity(0.22) : .clear, in: Circle())
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .hoverEffect()
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .foregroundStyle(.white)
     }
 
     // MARK: - Main panel
 
-    private var mainPanel: some View {
+    private func mainPanel(for section: Section) -> some View {
         Group {
             switch section {
             case .explore:

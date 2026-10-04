@@ -612,10 +612,14 @@ struct ExploreView: View {
                         // Generous gaps and edge padding leave room for the
                         // hover lift and glow, which the scroll view would
                         // otherwise clip or crowd into neighbouring tiles.
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 36)], spacing: 36) {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 280, maximum: 420), spacing: 32, alignment: .top)],
+                            spacing: 32
+                        ) {
                             ForEach(appModel.libraryItems) { libraryCard($0) }
                         }
-                        .padding(20)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 20)
                     }
                 }
             }
@@ -630,40 +634,67 @@ struct ExploreView: View {
                 if await appModel.openLibraryStory(itemID: item.id) { onOpenStory() }
             }
         } label: {
-            ZStack(alignment: .bottomLeading) {
-                Rectangle().fill(LinearGradient(
+            // The base shape fixes the card to its grid cell; the thumbnail is
+            // an overlay so a wide scaledToFill image can't push the card
+            // wider than its column and overlap its neighbours.
+            Rectangle()
+                .fill(LinearGradient(
                     colors: [Color(hex: 0x3D5A66), Color(hex: 0x1E2A30)], startPoint: .top, endPoint: .bottom))
-                if let url = item.thumbnailURL {
-                    AsyncImage(url: url) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        Color.clear
+                .overlay {
+                    if let url = item.thumbnailURL {
+                        AsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            Image(systemName: "map")
+                                .font(.system(size: 40, weight: .light))
+                                .foregroundStyle(.white.opacity(0.35))
+                        }
+                    } else {
+                        Image(systemName: "map")
+                            .font(.system(size: 40, weight: .light))
+                            .foregroundStyle(.white.opacity(0.35))
                     }
                 }
-                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 150)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(item.access == "public" ? "Story map" : "Story map · \(item.access)")
-                        .font(.system(size: 13, weight: .semibold))
-                        .textCase(.uppercase)
-                        .tracking(1.8)
-                        .foregroundStyle(.white.opacity(0.92))
-                    Text(item.title)
-                        .font(.system(size: 24, design: .serif))
-                        .lineLimit(3)
-                        .multilineTextAlignment(.leading)
+                .overlay(alignment: .bottom) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black.opacity(0.45), location: 0.45),
+                            .init(color: .black.opacity(0.82), location: 1),
+                        ],
+                        startPoint: .top, endPoint: .bottom)
+                        .frame(height: 170)
                 }
-                .padding(20)
-                if opening {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(.black.opacity(0.45))
+                .overlay(alignment: .bottomLeading) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(item.access == "public" ? "Story map" : "Story map · \(item.access)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .textCase(.uppercase)
+                            .tracking(1.8)
+                            .foregroundStyle(.white.opacity(0.85))
+                        Text(item.title)
+                            .font(.system(size: 24, design: .serif))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+                    .padding(22)
                 }
-            }
-            .frame(height: 240)
-            .clipShape(RoundedRectangle(cornerRadius: 28))
-            .contentShape(RoundedRectangle(cornerRadius: 28))
+                .overlay {
+                    if opening {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(.black.opacity(0.45))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 230)
+                .clipShape(RoundedRectangle(cornerRadius: 28))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 28)
+                        .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 28))
         }
         .buttonStyle(.plain)
         .modifier(CardHover(id: item.id, radius: 28, hovered: $hovered, enabled: true))

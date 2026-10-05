@@ -193,6 +193,7 @@ struct ExploreView: View {
                 sectionPage(.profile)
             }
         }
+        .background { WarmBackdrop() }
         // Click sound for any tap; simultaneous so buttons still receive it.
         .simultaneousGesture(TapGesture().onEnded { UISounds.shared.tap() })
         .onAppear { UISounds.shared.warmUp() }
@@ -203,13 +204,8 @@ struct ExploreView: View {
     }
 
     private func sectionPage(_ section: Section) -> some View {
-        ZStack {
-            WarmBackdrop()
-            mainPanel(for: section)
-                .padding(.horizontal, 40)
-                .padding(.vertical, 56)
-        }
-        .foregroundStyle(.white)
+        mainPanel(for: section)
+            .foregroundStyle(.white)
     }
 
     // MARK: - Main panel
@@ -246,20 +242,19 @@ struct ExploreView: View {
                 )
             }
         }
-        .padding(.top, 36)
-        .padding([.horizontal, .bottom], 44)
+        // Content sits directly on the window's own surface, with no inset card,
+        // so the window doesn't read as a second window nested inside the first.
+        .padding(.top, 48)
+        .padding([.horizontal, .bottom], 56)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(panelFill, in: RoundedRectangle(cornerRadius: 48))
-        .overlay(RoundedRectangle(cornerRadius: 48).strokeBorder(.white.opacity(0.16), lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 45, y: 40)
         .overlay(alignment: .topTrailing) {
             if menuOpen {
                 ZStack(alignment: .topTrailing) {
                     Color.black.opacity(0.001)
                         .onTapGesture { menuOpen = false }
                     filterMenu
-                        .padding(.trailing, 44)
-                        .padding(.top, 100)
+                        .padding(.trailing, 56)
+                        .padding(.top, 112)
                         .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .topTrailing)))
                 }
             }
@@ -791,10 +786,6 @@ struct ExploreView: View {
     }
 
     // MARK: - Style
-
-    private var panelFill: Color {
-        Color(red: 104 / 255, green: 90 / 255, blue: 77 / 255).opacity(0.62)
-    }
 
     private var darkInk: Color { Color(red: 0.169, green: 0.141, blue: 0.118) }
 }

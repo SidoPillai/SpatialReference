@@ -16,6 +16,8 @@ struct SpatialReferenceApp: App {
         WindowGroup {
             Group {
                 switch appModel.screen {
+                case _ where !appModel.hasRestoredSession:
+                    WarmBackdrop()
                 case .welcome:
                     WelcomeView { appModel.screen = .explore }
                 case .explore:
@@ -25,6 +27,7 @@ struct SpatialReferenceApp: App {
                 }
             }
             .environment(appModel)
+            .task { await appModel.restoreSession() }
         }
         .defaultSize(width: 1280, height: 960)
 

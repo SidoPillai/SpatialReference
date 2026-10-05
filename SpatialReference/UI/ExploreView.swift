@@ -18,12 +18,25 @@ struct CoverGlow {
 /// Cover art: gradient + glows (+ stars for the space story). Glows and stars
 /// are drawn in a Canvas so they never influence layout.
 struct CoverArt: View {
-    let story: ExploreStory
+    let art: AnyShapeStyle
+    var glows: [CoverGlow] = []
+    var stars = false
+
+    init(art: AnyShapeStyle, glows: [CoverGlow] = [], stars: Bool = false) {
+        self.art = art
+        self.glows = glows
+        self.stars = stars
+    }
+
+    init(story: ExploreStory) {
+        self.init(art: story.art, glows: story.glows, stars: story.stars)
+    }
+
     var body: some View {
-        Rectangle().fill(story.art)
+        Rectangle().fill(art)
             .overlay {
                 Canvas { ctx, size in
-                    for g in story.glows {
+                    for g in glows {
                         let center = CGPoint(x: size.width * g.center.x, y: size.height * g.center.y)
                         let r = g.radius * size.width
                         if g.solid {
@@ -36,7 +49,7 @@ struct CoverArt: View {
                                 Gradient(colors: [g.color, g.color.opacity(0)]),
                                 center: center, startRadius: 0, endRadius: r))
                     }
-                    if story.stars {
+                    if stars {
                         for (x, y, d) in [(0.20, 0.30, 3.2), (0.70, 0.58, 2.4), (0.42, 0.78, 2.8), (0.86, 0.20, 2.4), (0.56, 0.14, 2.4), (0.12, 0.62, 2.0)] {
                             ctx.fill(Path(ellipseIn: CGRect(x: size.width * x - d / 2, y: size.height * y - d / 2, width: d, height: d)), with: .color(.white))
                         }
@@ -223,7 +236,7 @@ struct ExploreView: View {
 
     @Environment(AppModel.self) private var appModel
 
-    enum Section { case explore, library, profile }
+    enum Section { case explore, exhibitions, environments, library, settings }
     @State private var section = Section.explore
     @State private var category = ExploreCategory.featured
 
@@ -254,11 +267,17 @@ struct ExploreView: View {
             Tab("Explore", systemImage: "safari", value: Section.explore) {
                 sectionPage(.explore)
             }
+            Tab("Exhibitions", systemImage: "building.columns", value: Section.exhibitions) {
+                sectionPage(.exhibitions)
+            }
+            Tab("Environments", systemImage: "mountain.2", value: Section.environments) {
+                sectionPage(.environments)
+            }
             Tab("Library", systemImage: "books.vertical", value: Section.library) {
                 sectionPage(.library)
             }
-            Tab("Profile", systemImage: "person", value: Section.profile) {
-                sectionPage(.profile)
+            Tab("Settings", systemImage: "gearshape", value: Section.settings) {
+                sectionPage(.settings)
             }
         }
         .background { WarmBackdrop() }
@@ -366,6 +385,12 @@ struct ExploreView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        case .exhibitions:
+            ExhibitionsView(hovered: $hovered)
+        case .environments:
+            EnvironmentsView()
+        case .settings:
+            SettingsView()
         case .library where signedInUsername != nil:
             padded(libraryPanel)
         case .library:
@@ -376,16 +401,6 @@ struct ExploreView: View {
                 signedOutDetail: "Sign in to open the story maps you’ve authored and the private stories your organization has shared with you.",
                 signedInHeadline: "Nothing here yet",
                 signedInDetail: "Your stories and your organization’s stories will appear here."
-            ))
-        case .profile:
-            padded(accountPanel(
-                title: "Profile",
-                icon: "person.crop.circle",
-                signedOutHeadline: "You’re browsing as a guest",
-                signedOutDetail: "Sign in to sync bookmarks and narration progress, and to unlock your organization’s private stories.",
-                signedInHeadline: signedInUsername ?? "Signed in",
-                signedInDetail: "Bookmarks and narration progress sync to your ArcGIS account.",
-                showsSignOut: true
             ))
         }
     }
@@ -600,8 +615,7 @@ struct ExploreView: View {
     private func accountPanel(
         title: String, icon: String,
         signedOutHeadline: String, signedOutDetail: String,
-        signedInHeadline: String, signedInDetail: String,
-        showsSignOut: Bool = false
+        signedInHeadline: String, signedInDetail: String
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(title)
@@ -660,26 +674,6 @@ struct ExploreView: View {
                         .foregroundStyle(.white.opacity(0.84))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 480)
-
-                    if showsSignOut {
-                        Button {
-                            Task { await appModel.signOut() }
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 20))
-                                Text("Sign out")
-                                    .font(.system(size: 19, weight: .semibold))
-                            }
-                            .frame(width: 360, height: 60)
-                            .background(.white.opacity(0.12), in: Capsule())
-                            .overlay(Capsule().strokeBorder(.white.opacity(0.3), lineWidth: 1))
-                            .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .hoverEffect()
-                        .padding(.top, 14)
-                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -984,9 +978,13 @@ final class UISounds: @unchecked Sendable {
     /// Touch the singleton early so players are ready before the first hover.
     func warmUp() {}
 
-    func chime() { play(\.chimePlayer) }
+    func chime() {
+        if UserDefaults.standard.object(forKey: SettingsKey.hoverChime) as? Bool ?? true { play(\.chimePlayer) }
+    }
 
-    func tap() { play(\.clickPlayer) }
+    func tap() {
+        if UserDefaults.standard.object(forKey: SettingsKey.tapSounds) as? Bool ?? true { play(\.clickPlayer) }
+    }
 
     private func play(_ player: KeyPath<UISounds, AVAudioPlayer?>) {
         queue.async { [self] in

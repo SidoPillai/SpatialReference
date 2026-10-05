@@ -46,6 +46,26 @@ class AppModel {
     private(set) var openingStoryID: String?
     var openStoryError: String?
 
+    /// False until the launch-time sign-in restore finishes, so the first
+    /// screen isn't picked before we know whether the user is signed in.
+    private(set) var hasRestoredSession = false
+
+    /// Restores a saved ArcGIS sign-in on launch. Only a user who is already
+    /// signed in skips the welcome screen; everyone else sees it.
+    func restoreSession() async {
+        await arcGISSession.restoreSession()
+        if case .signedIn = arcGISSession.state, screen == .welcome {
+            screen = .explore
+        }
+        hasRestoredSession = true
+    }
+
+    func signOut() async {
+        await arcGISSession.signOut()
+        libraryItems = []
+        libraryState = .idle
+    }
+
     func refreshLibrary() async {
         guard libraryState != .loading else { return }
         libraryState = .loading

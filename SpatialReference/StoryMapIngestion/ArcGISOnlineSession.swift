@@ -27,6 +27,11 @@ final class ArcGISOnlineSession {
     let portalURL = URL(string: "https://www.arcgis.com")!
 
     private let oauthConfiguration: OAuthUserConfiguration
+    private let challengeHandler: ChallengeHandler
+    /// Swaps the in-memory credential store for a Keychain-backed one, so an
+    /// OAuth sign-in survives relaunches. Sign-in waits on it so the new
+    /// credential always lands in the persistent store.
+    private var persistentStoreSetup: Task<Void, Never>?
 
     init() {
         oauthConfiguration = OAuthUserConfiguration(
@@ -34,14 +39,60 @@ final class ArcGISOnlineSession {
             clientID: "J3UzuLLFu8g1Nn0R",
             redirectURL: URL(string: "spatialreference-auth://auth")!
         )
-        ArcGISEnvironment.authenticationManager.arcGISAuthenticationChallengeHandler = ChallengeHandler(
-            configuration: oauthConfiguration
-        )
+        challengeHandler = ChallengeHandler(configuration: oauthConfiguration)
+        ArcGISEnvironment.authenticationManager.arcGISAuthenticationChallengeHandler = challengeHandler
+        persistentStoreSetup = Task {
+            do {
+                ArcGISEnvironment.authenticationManager.arcGISCredentialStore = try await .makePersistent(
+                    access: .afterFirstUnlockThisDeviceOnly
+                )
+            } catch {
+                // Fall back to the default in-memory store: sign-in still
+                // works, it just won't be remembered across launches.
+            }
+        }
+    }
+
+    /// Signs back in silently with the credential saved in the Keychain by a
+    /// previous session. Never shows the OAuth sheet: if there is no saved
+    /// credential, or it can no longer be refreshed, the user stays signed out.
+    func restoreSession() async {
+        await persistentStoreSetup?.value
+        guard state == .signedOut,
+              ArcGISEnvironment.authenticationManager.arcGISCredentialStore.credential(for: portalURL) != nil
+        else { return }
+
+        state = .signingIn
+        // Without a challenge handler an expired credential fails the load
+        // instead of prompting.
+        ArcGISEnvironment.authenticationManager.arcGISAuthenticationChallengeHandler = nil
+        defer { ArcGISEnvironment.authenticationManager.arcGISAuthenticationChallengeHandler = challengeHandler }
+        do {
+            let portal = Portal(url: portalURL, connection: .authenticated)
+            try await portal.load()
+            state = .signedIn(username: portal.user?.username ?? "Unknown user")
+        } catch {
+            // Keep the saved credential: the failure may just be no network,
+            // and an explicit sign-in or sign-out replaces it anyway.
+            state = .signedOut
+        }
+    }
+
+    /// Revokes the OAuth token and forgets the saved credential, so the next
+    /// launch starts signed out.
+    func signOut() async {
+        let store = ArcGISEnvironment.authenticationManager.arcGISCredentialStore
+        for case let credential as OAuthUserCredential in store.credentials {
+            try? await credential.revokeToken()
+        }
+        store.removeAll()
+        state = .signedOut
     }
 
     func signIn() async {
         guard state != .signingIn else { return }
         state = .signingIn
+        await persistentStoreSetup?.value
         do {
             let portal = Portal(url: portalURL, connection: .authenticated)
             try await portal.load()

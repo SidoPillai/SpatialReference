@@ -241,7 +241,8 @@ struct ExploreView: View {
                     signedOutHeadline: "You’re browsing as a guest",
                     signedOutDetail: "Sign in to sync bookmarks and narration progress, and to unlock your organization’s private stories.",
                     signedInHeadline: signedInUsername ?? "Signed in",
-                    signedInDetail: "Bookmarks and narration progress sync to your ArcGIS account."
+                    signedInDetail: "Bookmarks and narration progress sync to your ArcGIS account.",
+                    showsSignOut: true
                 )
             }
         }
@@ -471,7 +472,8 @@ struct ExploreView: View {
     private func accountPanel(
         title: String, icon: String,
         signedOutHeadline: String, signedOutDetail: String,
-        signedInHeadline: String, signedInDetail: String
+        signedInHeadline: String, signedInDetail: String,
+        showsSignOut: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(title)
@@ -530,6 +532,26 @@ struct ExploreView: View {
                         .foregroundStyle(.white.opacity(0.84))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 480)
+
+                    if showsSignOut {
+                        Button {
+                            Task { await appModel.signOut() }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .font(.system(size: 20))
+                                Text("Sign out")
+                                    .font(.system(size: 19, weight: .semibold))
+                            }
+                            .frame(width: 360, height: 60)
+                            .background(.white.opacity(0.12), in: Capsule())
+                            .overlay(Capsule().strokeBorder(.white.opacity(0.3), lineWidth: 1))
+                            .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .hoverEffect()
+                        .padding(.top, 14)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

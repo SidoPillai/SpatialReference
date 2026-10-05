@@ -6,8 +6,6 @@
 import AVFoundation
 import SwiftUI
 
-/// Placeholder catalog entry for the Explore grid. Cover art is drawn from
-/// gradients until stories carry real thumbnails.
 /// Soft radial highlight layered over a cover gradient. Center and radius
 /// are fractions of the card (radius relative to the card's width).
 struct CoverGlow {
@@ -49,23 +47,49 @@ struct CoverArt: View {
     }
 }
 
+/// Placeholder catalog entry for the Explore screen. Cover art is drawn from
+/// gradients until stories carry real thumbnails.
 struct ExploreStory: Identifiable {
     let id = UUID()
     let title: String
     let genre: String
     let minutes: Int
+    var summary = ""
+    var author = "Esri StoryMaps"
     var popularity = 0
     var added = 0
     var has3D = false
     var immersive = false
+    var narrated = false
+    var images = 0
+    var access = StoryAccess.public
+    var tag: CardTag?
     let art: AnyShapeStyle
     var glows: [CoverGlow] = []
     var stars = false
+
+    /// What the story offers, shown as the icon list on its card.
+    var features: [CardFeature] {
+        var features: [CardFeature] = []
+        if immersive { features.append(CardFeature(systemImage: "visionpro", label: "Immersive")) }
+        if has3D { features.append(CardFeature(systemImage: "cube", label: "3D Model")) }
+        if images > 0 {
+            features.append(CardFeature(systemImage: "photo.on.rectangle", label: "Gallery"))
+            features.append(CardFeature(systemImage: "photo.stack", label: "\(images) Images"))
+        }
+        if narrated { features.append(CardFeature(systemImage: "waveform", label: "Audio Guide")) }
+        features.append(CardFeature(systemImage: "clock", label: "\(minutes) min"))
+        return features
+    }
 
     static let featured = ExploreStory(
         title: "The Lighthouse Keeper’s Last Night",
         genre: "Fiction",
         minutes: 12,
+        summary: "On the final night before the lamp goes automatic, the keeper climbs the tower one last time and the coastline tells its own story.",
+        has3D: true,
+        immersive: true,
+        narrated: true,
         art: AnyShapeStyle(LinearGradient(
             stops: [
                 .init(color: Color(hex: 0x39434F), location: 0),
@@ -80,7 +104,7 @@ struct ExploreStory: Identifiable {
     static let catalog: [ExploreStory] = [
         ExploreStory(
             title: "Beneath the Kelp Forest", genre: "Nature", minutes: 9,
-            popularity: 88, added: 3, has3D: true, immersive: true,
+            popularity: 88, added: 3, has3D: true, immersive: true, narrated: true, images: 12, tag: .new,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x1F6B6A), Color(hex: 0x0C3A40), Color(hex: 0x061D22)],
                 startPoint: .top, endPoint: .bottom)),
@@ -88,7 +112,7 @@ struct ExploreStory: Identifiable {
         ),
         ExploreStory(
             title: "Letters from the Rose City", genre: "History", minutes: 14,
-            popularity: 64, added: 1, has3D: false, immersive: true,
+            popularity: 64, added: 1, immersive: true, narrated: true, images: 8, access: .organization, tag: .updated,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0xE9B88A), Color(hex: 0xC7774B), Color(hex: 0x8A3F26), Color(hex: 0x4E2216)],
                 startPoint: .top, endPoint: .bottom)),
@@ -96,7 +120,7 @@ struct ExploreStory: Identifiable {
         ),
         ExploreStory(
             title: "The Quiet Orbit", genre: "Space", minutes: 11,
-            popularity: 92, added: 5, has3D: true, immersive: true,
+            popularity: 92, added: 5, has3D: true, immersive: true, narrated: true, tag: .new,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x05070F), Color(hex: 0x05070F)],
                 startPoint: .top, endPoint: .bottom)),
@@ -108,7 +132,7 @@ struct ExploreStory: Identifiable {
         ),
         ExploreStory(
             title: "The Clockwork Orchard", genre: "Fiction", minutes: 10,
-            popularity: 71, added: 2, has3D: true, immersive: false,
+            popularity: 71, added: 2, has3D: true, access: .organization,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x56642F), Color(hex: 0x2C3A1E), Color(hex: 0x1A2412)],
                 startPoint: .topLeading, endPoint: .bottomTrailing)),
@@ -116,11 +140,28 @@ struct ExploreStory: Identifiable {
         ),
         ExploreStory(
             title: "Monsoon Market", genre: "Travel", minutes: 8,
-            popularity: 57, added: 4, has3D: false, immersive: true,
+            popularity: 57, added: 4, immersive: true, narrated: true, images: 20, tag: .updated,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x3D5A66), Color(hex: 0x2A3F4A), Color(hex: 0x1E2A30)],
                 startPoint: .top, endPoint: .bottom)),
             glows: [CoverGlow(center: UnitPoint(x: 0.5, y: 1), radius: 1.0, color: Color(hex: 0xFFAA50).opacity(0.6))]
+        ),
+        ExploreStory(
+            title: "Glacier Lines", genre: "Nature", minutes: 7,
+            popularity: 49, added: 6, immersive: true, images: 14, tag: .new,
+            art: AnyShapeStyle(LinearGradient(
+                colors: [Color(hex: 0xCFE3EA), Color(hex: 0x7FA6B8), Color(hex: 0x2E4A5C)],
+                startPoint: .top, endPoint: .bottom)),
+            glows: [CoverGlow(center: UnitPoint(x: 0.2, y: 0.1), radius: 0.7, color: .white.opacity(0.5))]
+        ),
+        ExploreStory(
+            title: "Night Shift at the Observatory", genre: "Space", minutes: 13,
+            popularity: 76, added: 0, has3D: true, narrated: true, images: 4, access: .organization,
+            art: AnyShapeStyle(LinearGradient(
+                colors: [Color(hex: 0x1B1033), Color(hex: 0x0B0716)],
+                startPoint: .top, endPoint: .bottom)),
+            glows: [CoverGlow(center: UnitPoint(x: 0.5, y: 1.1), radius: 0.9, color: Color(hex: 0xB070FF).opacity(0.45))],
+            stars: true
         ),
     ]
 }
@@ -129,8 +170,53 @@ enum ExploreSort: String, CaseIterable {
     case popular = "Popular", newest = "Newest", oldest = "Oldest"
 }
 
-/// Explore screen: section tab ornament, voice search, sort/filter menu, genre chips
-/// and a featured story beside a grid of story cards.
+/// Top-bar categories. Each is a kind of experience a story offers rather
+/// than a subject, so membership comes straight from the story's features.
+enum ExploreCategory: String, CaseIterable, Identifiable {
+    case featured, immersive, scenes, narrated, galleries, new
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .featured: "Featured"
+        case .immersive: "Immersive"
+        case .scenes: "3D Scenes"
+        case .narrated: "Narrated"
+        case .galleries: "Galleries"
+        case .new: "New"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .featured: "star.fill"
+        case .immersive: "visionpro"
+        case .scenes: "cube"
+        case .narrated: "waveform"
+        case .galleries: "photo.on.rectangle"
+        case .new: "sparkles"
+        }
+    }
+
+    /// Categories shown as rows beneath the Featured hero.
+    static var rows: [ExploreCategory] { allCases.filter { $0 != .featured } }
+
+    func includes(_ story: ExploreStory) -> Bool {
+        switch self {
+        case .featured: true
+        case .immersive: story.immersive
+        case .scenes: story.has3D
+        case .narrated: story.narrated
+        case .galleries: story.images > 0
+        case .new: story.tag != nil
+        }
+    }
+}
+
+/// Explore screen: a top category bar ornament (Featured, Immersive, 3D
+/// Scenes, …), a Featured page with a hero story above a row per category,
+/// and a card grid for every other category.
 struct ExploreView: View {
 
     var onOpenStory: () -> Void
@@ -139,28 +225,18 @@ struct ExploreView: View {
 
     enum Section { case explore, library, profile }
     @State private var section = Section.explore
+    @State private var category = ExploreCategory.featured
 
     private var session: ArcGISOnlineSession { appModel.arcGISSession }
 
-    private let genres = ["All", "Fiction", "Nature", "History", "Space", "Travel"]
-
-    @State private var genre = "All"
     @State private var listening = false
-    @State private var menuOpen = false
+    @State private var showingDetails = false
     @State private var sort = ExploreSort.popular
-    @State private var only3D = false
-    @State private var onlyImmersive = false
     @State private var hovered: String?
 
-    private var hasActiveFilters: Bool { sort != .popular || only3D || onlyImmersive }
-
-    private func matches(_ story: ExploreStory) -> Bool {
-        (!only3D || story.has3D) && (!onlyImmersive || story.immersive)
-    }
-
-    private var cards: [ExploreStory] {
+    private func stories(in category: ExploreCategory) -> [ExploreStory] {
         ExploreStory.catalog
-            .filter { genre == "All" || $0.genre == genre }
+            .filter(category.includes)
             .sorted {
                 switch sort {
                 case .popular: $0.popularity > $1.popularity
@@ -168,14 +244,6 @@ struct ExploreView: View {
                 case .oldest: $0.added < $1.added
                 }
             }
-            .prefix(4)
-            .map { $0 }
-    }
-
-    private func resetFilters() {
-        sort = .popular
-        only3D = false
-        onlyImmersive = false
     }
 
     var body: some View {
@@ -194,6 +262,20 @@ struct ExploreView: View {
             }
         }
         .background { WarmBackdrop() }
+        .ornament(
+            visibility: section == .explore ? .visible : .hidden,
+            attachmentAnchor: .scene(.top),
+            contentAlignment: .bottom
+        ) {
+            categoryBar
+        }
+        .ornament(
+            visibility: section == .explore ? .visible : .hidden,
+            attachmentAnchor: .scene(.topTrailing),
+            contentAlignment: .bottomTrailing
+        ) {
+            voiceButton
+        }
         // Click sound for any tap; simultaneous so buttons still receive it.
         .simultaneousGesture(TapGesture().onEnded { UISounds.shared.tap() })
         .onAppear { UISounds.shared.warmUp() }
@@ -208,223 +290,19 @@ struct ExploreView: View {
             .foregroundStyle(.white)
     }
 
-    // MARK: - Main panel
+    // MARK: - Category bar
 
-    private func mainPanel(for section: Section) -> some View {
-        Group {
-            switch section {
-            case .explore:
-                VStack(alignment: .leading, spacing: 24) {
-                    header
-                    genreChips.padding(.bottom, 20)
-                    grid
-                }
-            case .library where signedInUsername != nil:
-                libraryPanel
-            case .library:
-                accountPanel(
-                    title: "Library",
-                    icon: "books.vertical",
-                    signedOutHeadline: "Your stories live here",
-                    signedOutDetail: "Sign in to open the story maps you’ve authored and the private stories your organization has shared with you.",
-                    signedInHeadline: "Nothing here yet",
-                    signedInDetail: "Your stories and your organization’s stories will appear here."
-                )
-            case .profile:
-                accountPanel(
-                    title: "Profile",
-                    icon: "person.crop.circle",
-                    signedOutHeadline: "You’re browsing as a guest",
-                    signedOutDetail: "Sign in to sync bookmarks and narration progress, and to unlock your organization’s private stories.",
-                    signedInHeadline: signedInUsername ?? "Signed in",
-                    signedInDetail: "Bookmarks and narration progress sync to your ArcGIS account.",
-                    showsSignOut: true
-                )
-            }
-        }
-        // Content sits directly on the window's own surface, with no inset card,
-        // so the window doesn't read as a second window nested inside the first.
-        .padding(.top, 48)
-        .padding([.horizontal, .bottom], 56)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .topTrailing) {
-            if menuOpen {
-                ZStack(alignment: .topTrailing) {
-                    Color.black.opacity(0.001)
-                        .onTapGesture { menuOpen = false }
-                    filterMenu
-                        .padding(.trailing, 56)
-                        .padding(.top, 112)
-                        .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .topTrailing)))
-                }
-            }
-        }
-        .animation(.easeOut(duration: 0.22), value: menuOpen)
-    }
-
-    private var header: some View {
-        HStack(spacing: 20) {
-            Text("Explore")
-                .font(.system(size: 44, weight: .regular, design: .serif))
-            Spacer()
-
-            Button { listening.toggle() } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "mic")
-                        .font(.system(size: 18, weight: .semibold))
-                        .frame(width: 38, height: 38)
-                        .background(.white.opacity(0.18), in: Circle())
-                    if listening {
-                        HStack(spacing: 3) {
-                            ForEach(0..<5, id: \.self) { i in
-                                Capsule().fill(.white).frame(width: 3, height: 22)
-                                    .phaseAnimator([0.3, 1.0]) { view, scale in
-                                        view.scaleEffect(y: scale)
-                                    } animation: { _ in .easeInOut(duration: 0.45).delay(Double(i) * 0.15) }
-                            }
-                        }
-                    }
-                    Text(listening ? "Listening…" : "Search by voice")
+    private var categoryBar: some View {
+        HStack(spacing: 8) {
+            ForEach(ExploreCategory.allCases) { item in
+                let on = item == category
+                Button { category = item } label: {
+                    Label(item.title, systemImage: item.systemImage)
                         .font(.system(size: 17, weight: .semibold))
-                }
-                .padding(.leading, 8)
-                .padding(.trailing, 22)
-                .frame(minWidth: 240, minHeight: 52, alignment: .leading)
-                .background(listening ? .white.opacity(0.26) : .black.opacity(0.18), in: Capsule())
-                .overlay(Capsule().strokeBorder(.white.opacity(listening ? 0.85 : 0), lineWidth: 2))
-                .shadow(color: Color(red: 1, green: 0.78, blue: 0.55).opacity(listening ? 0.35 : 0), radius: 12)
-                .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .hoverEffect()
-            .accessibilityLabel("Search by voice")
-            .accessibilityAddTraits(listening ? .isSelected : [])
-
-            Button { menuOpen.toggle() } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 20, weight: .bold))
-                    .frame(width: 52, height: 52)
-                    .background(.white.opacity(menuOpen ? 0.3 : 0.14), in: Circle())
-                    .overlay(Circle().strokeBorder(.white.opacity(menuOpen ? 0.85 : 0), lineWidth: 2))
-                    .overlay(alignment: .topTrailing) {
-                        if hasActiveFilters {
-                            Circle()
-                                .fill(Color(red: 1, green: 0.773, blue: 0.431))
-                                .frame(width: 10, height: 10)
-                                .padding(6)
-                        }
-                    }
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .hoverEffect()
-            .accessibilityLabel("Sort and filter")
-        }
-    }
-
-    // MARK: - Sort / filter menu
-
-    private var filterMenu: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            menuHeading("Sort by")
-            ForEach(ExploreSort.allCases, id: \.self) { option in
-                Button { sort = option } label: {
-                    HStack {
-                        Text(option.rawValue).font(.system(size: 17, weight: .medium))
-                        Spacer()
-                        if sort == option { Image(systemName: "checkmark").font(.system(size: 16, weight: .bold)) }
-                    }
-                    .padding(.horizontal, 14)
-                    .frame(height: 48)
-                    .background(.white.opacity(sort == option ? 0.16 : 0), in: RoundedRectangle(cornerRadius: 16))
-                    .contentShape(RoundedRectangle(cornerRadius: 16))
-                }
-                .buttonStyle(.plain)
-                .hoverEffect()
-                .accessibilityAddTraits(sort == option ? .isSelected : [])
-            }
-
-            Divider().overlay(.white.opacity(0.18)).padding(.horizontal, 12).padding(.vertical, 8)
-
-            menuHeading("Show only")
-            toggleRow("Has a 3D object", systemImage: "cube", isOn: $only3D)
-            toggleRow("Full immersion", systemImage: "arrow.up.left.and.arrow.down.right", isOn: $onlyImmersive)
-
-            if hasActiveFilters {
-                Divider().overlay(.white.opacity(0.18)).padding(.horizontal, 12).padding(.vertical, 8)
-                Button(action: resetFilters) {
-                    Text("Reset sort and filters")
-                        .font(.system(size: 16, weight: .semibold))
-                        .underline()
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .hoverEffect()
-            }
-        }
-        .padding(14)
-        .frame(width: 340)
-        .background {
-            RoundedRectangle(cornerRadius: 30)
-                .fill(Color(red: 78 / 255, green: 67 / 255, blue: 57 / 255).opacity(0.94))
-                .overlay(
-                    LinearGradient(colors: [.white.opacity(0.14), .white.opacity(0.04)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        .clipShape(RoundedRectangle(cornerRadius: 30))
-                )
-        }
-        .overlay(RoundedRectangle(cornerRadius: 30).strokeBorder(.white.opacity(0.22), lineWidth: 1))
-        .shadow(color: .black.opacity(0.45), radius: 35, y: 30)
-    }
-
-    private func menuHeading(_ text: String) -> some View {
-        Text(text.uppercased())
-            .font(.system(size: 13, weight: .semibold))
-            .tracking(1.8)
-            .foregroundStyle(.white.opacity(0.8))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-    }
-
-    private func toggleRow(_ label: String, systemImage: String, isOn: Binding<Bool>) -> some View {
-        Button { isOn.wrappedValue.toggle() } label: {
-            HStack(spacing: 12) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .medium))
-                    .frame(width: 34, height: 34)
-                    .background(.white.opacity(0.12), in: Circle())
-                Text(label).font(.system(size: 17, weight: .medium))
-                Spacer()
-                Capsule()
-                    .fill(isOn.wrappedValue ? Color(red: 0.949, green: 0.784, blue: 0.475) : .white.opacity(0.22))
-                    .frame(width: 44, height: 26)
-                    .overlay(alignment: isOn.wrappedValue ? .trailing : .leading) {
-                        Circle().fill(.white).frame(width: 20, height: 20)
-                            .shadow(color: .black.opacity(0.3), radius: 1.5, y: 1)
-                            .padding(3)
-                    }
-                    .animation(.easeOut(duration: 0.2), value: isOn.wrappedValue)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 52)
-            .contentShape(RoundedRectangle(cornerRadius: 16))
-        }
-        .buttonStyle(.plain)
-        .hoverEffect()
-        .accessibilityAddTraits(isOn.wrappedValue ? .isSelected : [])
-    }
-
-    private var genreChips: some View {
-        HStack(spacing: 12) {
-            ForEach(genres, id: \.self) { label in
-                let on = label == genre
-                Button { genre = label } label: {
-                    Text(label)
-                        .font(.system(size: 17, weight: .semibold))
-                        .padding(.horizontal, 24)
-                        .frame(height: 48)
-                        .background(.white.opacity(on ? 0.24 : 0.1), in: Capsule())
-                        .overlay(Capsule().strokeBorder(.white.opacity(on ? 0.9 : 0), lineWidth: 2))
+                        .foregroundStyle(on ? .black : .white)
+                        .padding(.horizontal, 18)
+                        .frame(height: 44)
+                        .background(on ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.08)), in: Capsule())
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -432,29 +310,284 @@ struct ExploreView: View {
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
+        .foregroundStyle(.white)
+        .padding(8)
+        .glassBackgroundEffect(in: Capsule())
+        .simultaneousGesture(TapGesture().onEnded { UISounds.shared.tap() })
+        .padding(.bottom, 24)
     }
 
-    private var grid: some View {
-        HStack(spacing: 20) {
-            featuredCard
+    /// Voice search, docked on its own above the window's top-right corner.
+    private var voiceButton: some View {
+        Button { listening.toggle() } label: {
+            HStack(spacing: 10) {
+                if listening {
+                    HStack(spacing: 3) {
+                        ForEach(0..<5, id: \.self) { i in
+                            Capsule().fill(.white).frame(width: 3, height: 18)
+                                .phaseAnimator([0.3, 1.0]) { view, scale in
+                                    view.scaleEffect(y: scale)
+                                } animation: { _ in .easeInOut(duration: 0.45).delay(Double(i) * 0.15) }
+                        }
+                    }
+                    Text("Listening…").font(.system(size: 17, weight: .semibold))
+                } else {
+                    Image(systemName: "mic").font(.system(size: 18, weight: .semibold))
+                }
+            }
+            .padding(.horizontal, listening ? 18 : 0)
+            .frame(minWidth: 44, minHeight: 44)
+            .background(.white.opacity(listening ? 0.26 : 0.08), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .hoverEffect()
+        .accessibilityLabel("Search by voice")
+        .accessibilityAddTraits(listening ? .isSelected : [])
+        .foregroundStyle(.white)
+        .padding(8)
+        .glassBackgroundEffect(in: Capsule())
+        .simultaneousGesture(TapGesture().onEnded { UISounds.shared.tap() })
+        .animation(.easeOut(duration: 0.2), value: listening)
+        .padding(.bottom, 24)
+    }
 
-            // 2×2 grid of story cards; empty slots keep the layout stable.
-            Grid(horizontalSpacing: 20, verticalSpacing: 20) {
-                ForEach(0..<2, id: \.self) { row in
-                    GridRow {
-                        ForEach(0..<2, id: \.self) { col in
-                            let index = row * 2 + col
-                            if cards.indices.contains(index) {
-                                storyCard(cards[index])
-                            } else {
-                                Color.clear
+    // MARK: - Main panel
+
+    @ViewBuilder
+    private func mainPanel(for section: Section) -> some View {
+        switch section {
+        case .explore:
+            Group {
+                if category == .featured {
+                    featuredPage
+                } else {
+                    categoryPage(category)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        case .library where signedInUsername != nil:
+            padded(libraryPanel)
+        case .library:
+            padded(accountPanel(
+                title: "Library",
+                icon: "books.vertical",
+                signedOutHeadline: "Your stories live here",
+                signedOutDetail: "Sign in to open the story maps you’ve authored and the private stories your organization has shared with you.",
+                signedInHeadline: "Nothing here yet",
+                signedInDetail: "Your stories and your organization’s stories will appear here."
+            ))
+        case .profile:
+            padded(accountPanel(
+                title: "Profile",
+                icon: "person.crop.circle",
+                signedOutHeadline: "You’re browsing as a guest",
+                signedOutDetail: "Sign in to sync bookmarks and narration progress, and to unlock your organization’s private stories.",
+                signedInHeadline: signedInUsername ?? "Signed in",
+                signedInDetail: "Bookmarks and narration progress sync to your ArcGIS account.",
+                showsSignOut: true
+            ))
+        }
+    }
+
+    // Content sits directly on the window's own surface, with no inset card,
+    // so the window doesn't read as a second window nested inside the first.
+    private func padded(_ content: some View) -> some View {
+        content
+            .padding(.top, 48)
+            .padding([.horizontal, .bottom], 56)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Featured
+
+    private var featuredPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 32) {
+                hero(.featured)
+
+                ForEach(ExploreCategory.rows) { row in
+                    let items = stories(in: row)
+                    if !items.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Button { category = row } label: {
+                                HStack(spacing: 8) {
+                                    Label(row.title.uppercased(), systemImage: row.systemImage)
+                                        .tracking(1.6)
+                                    Image(systemName: "chevron.right")
+                                }
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(Color(hex: 0xF0A050))
+                                .padding(.vertical, 6)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .hoverEffect()
+                            .padding(.horizontal, 56)
+                            .accessibilityHint("Shows all \(row.title) stories")
+
+                            // Vertical padding leaves room for the hover lift
+                            // and glow, which the scroll view would clip.
+                            ScrollView(.horizontal) {
+                                LazyHStack(spacing: 24) {
+                                    ForEach(items) { exploreCard($0).frame(width: 290) }
+                                }
+                                .padding(.horizontal, 56)
+                                .padding(.vertical, 16)
+                            }
+                            .scrollIndicators(.hidden)
                         }
                     }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.bottom, 40)
         }
+    }
+
+    /// Full-bleed banner for the featured story: cover art fading into a
+    /// dark scrim, title with a format pill, summary, then actions and
+    /// metadata on one line.
+    private func hero(_ story: ExploreStory) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 16) {
+                Text(story.title)
+                    .font(.system(size: 44, weight: .bold))
+                Text("Full immersion")
+                    .font(.system(size: 16, weight: .semibold))
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
+                    .overlay(Capsule().strokeBorder(.white.opacity(0.9), lineWidth: 2))
+            }
+            Text(story.summary)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.white.opacity(0.85))
+                .lineLimit(2)
+                .frame(maxWidth: 760, alignment: .leading)
+
+            HStack(spacing: 14) {
+                Button(action: onOpenStory) {
+                    Label("Begin", systemImage: "play.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(darkInk)
+                        .padding(.horizontal, 26)
+                        .frame(height: 50)
+                        .background(.white, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect()
+
+                Button { showingDetails = true } label: {
+                    Label("Details", systemImage: "info.circle")
+                        .font(.system(size: 18, weight: .semibold))
+                        .padding(.horizontal, 22)
+                        .frame(height: 50)
+                        .background(.white.opacity(0.18), in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect()
+                .popover(isPresented: $showingDetails) { details(story) }
+
+                Text("\(story.minutes) min  •  \(story.genre)  •  \(story.author)")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .padding(.leading, 8)
+            }
+            .padding(.top, 6)
+        }
+        .padding(.horizontal, 56)
+        .padding(.bottom, 40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        .frame(height: 440)
+        // Art layers sit in the background so their size can't change the
+        // banner's height and push the action row out of view.
+        .background {
+            ZStack {
+                CoverArt(story: story)
+                LighthouseArt()
+                    .frame(width: 760, height: 620)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                LinearGradient(colors: [.black.opacity(0.8), .black.opacity(0.3), .clear], startPoint: .leading, endPoint: .trailing)
+                LinearGradient(colors: [.clear, .black.opacity(0.65)], startPoint: .center, endPoint: .bottom)
+            }
+        }
+        .clipped()
+    }
+
+    private func details(_ story: ExploreStory) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(story.title).font(.system(size: 24, weight: .bold))
+            Text(story.summary)
+                .font(.system(size: 17))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            FlowLayout(spacing: 14, lineSpacing: 8) {
+                ForEach(story.features, id: \.self) { feature in
+                    Label(feature.label, systemImage: feature.systemImage)
+                }
+            }
+            .font(.system(size: 15, weight: .medium))
+        }
+        .padding(28)
+        .frame(width: 420)
+    }
+
+    // MARK: - Category pages
+
+    private func categoryPage(_ category: ExploreCategory) -> some View {
+        let items = stories(in: category)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                    Text(category.title)
+                        .font(.system(size: 40, weight: .bold))
+                    Text(items.count == 1 ? "1 story" : "\(items.count) stories")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.6))
+                    Spacer()
+                    Menu {
+                        Picker("Sort by", selection: $sort) {
+                            ForEach(ExploreSort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        }
+                    } label: {
+                        Label("Sort: \(sort.rawValue)", systemImage: "arrow.up.arrow.down")
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                }
+                .padding(.horizontal, 16)
+
+                if items.isEmpty {
+                    Text("No stories in \(category.title) yet.")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .frame(maxWidth: .infinity, minHeight: 300)
+                } else {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 260, maximum: 340), spacing: 28, alignment: .top)],
+                        spacing: 28
+                    ) {
+                        ForEach(items) { exploreCard($0) }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
+                }
+            }
+            .padding(.top, 40)
+            .padding(.horizontal, 40)
+            .padding(.bottom, 40)
+        }
+    }
+
+    private func exploreCard(_ story: ExploreStory) -> some View {
+        Button(action: onOpenStory) {
+            StoryCard(title: story.title, tag: story.tag, badge: story.access.badge, features: story.features) {
+                CoverArt(story: story)
+            }
+        }
+        .buttonStyle(.plain)
+        .modifier(CardHover(id: story.title, radius: StoryCardMetrics.radius, hovered: $hovered, enabled: true))
+        .accessibilityLabel("\(story.title), \(story.genre), \(story.minutes) minutes")
     }
 
     // MARK: - Account panels
@@ -610,7 +743,7 @@ struct ExploreView: View {
                         // hover lift and glow, which the scroll view would
                         // otherwise clip or crowd into neighbouring tiles.
                         LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 280, maximum: 420), spacing: 32, alignment: .top)],
+                            columns: [GridItem(.adaptive(minimum: 260, maximum: 340), spacing: 32, alignment: .top)],
                             spacing: 32
                         ) {
                             ForEach(appModel.libraryItems) { libraryCard($0) }
@@ -631,158 +764,58 @@ struct ExploreView: View {
                 if await appModel.openLibraryStory(itemID: item.id) { onOpenStory() }
             }
         } label: {
-            // The base shape fixes the card to its grid cell; the thumbnail is
-            // an overlay so a wide scaledToFill image can't push the card
-            // wider than its column and overlap its neighbours.
-            Rectangle()
-                .fill(LinearGradient(
-                    colors: [Color(hex: 0x3D5A66), Color(hex: 0x1E2A30)], startPoint: .top, endPoint: .bottom))
-                .overlay {
-                    if let url = item.thumbnailURL {
-                        AsyncImage(url: url) { image in
-                            image.resizable().scaledToFill()
-                        } placeholder: {
+            StoryCard(
+                title: item.title,
+                tag: isRecent(item.modified) ? .updated : nil,
+                badge: StoryAccess(arcGIS: item.access).badge,
+                features: libraryFeatures(item)
+            ) {
+                Rectangle()
+                    .fill(LinearGradient(
+                        colors: [Color(hex: 0x3D5A66), Color(hex: 0x1E2A30)], startPoint: .top, endPoint: .bottom))
+                    .overlay {
+                        if let url = item.thumbnailURL {
+                            AsyncImage(url: url) { image in
+                                image.resizable().scaledToFill()
+                            } placeholder: {
+                                Image(systemName: "map")
+                                    .font(.system(size: 40, weight: .light))
+                                    .foregroundStyle(.white.opacity(0.35))
+                            }
+                        } else {
                             Image(systemName: "map")
                                 .font(.system(size: 40, weight: .light))
                                 .foregroundStyle(.white.opacity(0.35))
                         }
-                    } else {
-                        Image(systemName: "map")
-                            .font(.system(size: 40, weight: .light))
-                            .foregroundStyle(.white.opacity(0.35))
                     }
+            }
+            .overlay {
+                if opening {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(.black.opacity(0.45))
+                        .clipShape(RoundedRectangle(cornerRadius: StoryCardMetrics.radius))
                 }
-                .overlay(alignment: .bottom) {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black.opacity(0.45), location: 0.45),
-                            .init(color: .black.opacity(0.82), location: 1),
-                        ],
-                        startPoint: .top, endPoint: .bottom)
-                        .frame(height: 170)
-                }
-                .overlay(alignment: .bottomLeading) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(item.access == "public" ? "Story map" : "Story map · \(item.access)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .textCase(.uppercase)
-                            .tracking(1.8)
-                            .foregroundStyle(.white.opacity(0.85))
-                        Text(item.title)
-                            .font(.system(size: 24, design: .serif))
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                    }
-                    .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
-                    .padding(22)
-                }
-                .overlay {
-                    if opening {
-                        ProgressView()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(.black.opacity(0.45))
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 230)
-                .clipShape(RoundedRectangle(cornerRadius: 28))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 28)
-                        .strokeBorder(.white.opacity(0.14), lineWidth: 1)
-                }
-                .contentShape(RoundedRectangle(cornerRadius: 28))
+            }
         }
         .buttonStyle(.plain)
-        .modifier(CardHover(id: item.id, radius: 28, hovered: $hovered, enabled: true))
+        .modifier(CardHover(id: item.id, radius: StoryCardMetrics.radius, hovered: $hovered, enabled: true))
         .disabled(appModel.openingStoryID != nil)
         .accessibilityLabel("\(item.title), \(item.access) story map")
     }
 
-    // MARK: - Cards
-
-    private var featuredCard: some View {
-        let story = ExploreStory.featured
-        return Button(action: onOpenStory) {
-            ZStack(alignment: .bottomLeading) {
-                CoverArt(story: story)
-                LighthouseArt()
-                LinearGradient(colors: [.clear, .black.opacity(0.62)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 260)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("\(story.genre) · \(story.minutes) min".uppercased())
-                        .font(.system(size: 14, weight: .semibold))
-                        .tracking(2)
-                        .foregroundStyle(.white.opacity(0.9))
-                    Text(story.title)
-                        .font(.system(size: 44, design: .serif))
-                        .lineSpacing(-6)
-                        .frame(maxWidth: 460, alignment: .leading)
-                        .multilineTextAlignment(.leading)
-                    HStack(spacing: 10) {
-                        Image(systemName: "play.fill").font(.system(size: 16))
-                        Text("Begin story").font(.system(size: 18, weight: .semibold))
-                    }
-                    .foregroundStyle(darkInk)
-                    .padding(.horizontal, 26)
-                    .frame(height: 52)
-                    .background(Color(red: 0.965, green: 0.945, blue: 0.918), in: Capsule())
-                    .padding(.top, 8)
-                }
-                .padding(32)
-
-                HStack(spacing: 8) {
-                    badge("Featured")
-                    badge("Full immersion · 3D object")
-                }
-                .padding(24)
-                .frame(maxHeight: .infinity, alignment: .top)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 32))
-            .contentShape(RoundedRectangle(cornerRadius: 32))
+    private func libraryFeatures(_ item: ArcGISOnlineSession.StoryMapItem) -> [CardFeature] {
+        var features = [CardFeature(systemImage: "map", label: "Story map")]
+        if let modified = item.modified {
+            features.append(CardFeature(systemImage: "calendar", label: modified.formatted(date: .abbreviated, time: .omitted)))
         }
-        .buttonStyle(.plain)
-        .modifier(CardHover(id: "featured", radius: 32, hovered: $hovered, enabled: true))
-        .accessibilityLabel("Featured: \(story.title). Begin story")
+        return features
     }
 
-    private func badge(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 14, weight: .semibold))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(.black.opacity(0.38), in: Capsule())
-    }
-
-    private func storyCard(_ story: ExploreStory) -> some View {
-        Button(action: onOpenStory) {
-            ZStack(alignment: .bottomLeading) {
-                CoverArt(story: story)
-                LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 150)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("\(story.genre) · \(story.minutes) min".uppercased())
-                        .font(.system(size: 13, weight: .semibold))
-                        .tracking(1.8)
-                        .foregroundStyle(.white.opacity(0.92))
-                    Text(story.title)
-                        .font(.system(size: 26, design: .serif))
-                        .lineSpacing(-3)
-                        .multilineTextAlignment(.leading)
-                }
-                .padding(20)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 28))
-            .contentShape(RoundedRectangle(cornerRadius: 28))
-        }
-        .buttonStyle(.plain)
-        .modifier(CardHover(id: story.title, radius: 28, hovered: $hovered, enabled: matches(story)))
-        .accessibilityLabel("\(story.title), \(story.genre), \(story.minutes) minutes")
+    /// Edited within the last week, which earns the card an "Updated" tag.
+    private func isRecent(_ date: Date?) -> Bool {
+        guard let date else { return false }
+        return date > Date.now.addingTimeInterval(-7 * 24 * 60 * 60)
     }
 
     // MARK: - Style

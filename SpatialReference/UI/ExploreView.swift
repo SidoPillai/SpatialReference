@@ -236,13 +236,13 @@ struct ExploreView: View {
 
     @Environment(AppModel.self) private var appModel
 
-    enum Section { case explore, exhibitions, environments, library, settings }
+    enum Section { case explore, exhibitions, environments, library, search, settings }
     @State private var section = Section.explore
     @State private var category = ExploreCategory.featured
 
     private var session: ArcGISOnlineSession { appModel.arcGISSession }
 
-    @State private var listening = false
+    @State private var query = ""
     @State private var showingDetails = false
     @State private var sort = ExploreSort.popular
     @State private var hovered: String?
@@ -276,6 +276,9 @@ struct ExploreView: View {
             Tab("Library", systemImage: "books.vertical", value: Section.library) {
                 sectionPage(.library)
             }
+            Tab("Search", systemImage: "magnifyingglass", value: Section.search) {
+                sectionPage(.search)
+            }
             Tab("Settings", systemImage: "gearshape", value: Section.settings) {
                 sectionPage(.settings)
             }
@@ -287,13 +290,6 @@ struct ExploreView: View {
             contentAlignment: .bottom
         ) {
             categoryBar
-        }
-        .ornament(
-            visibility: section == .explore ? .visible : .hidden,
-            attachmentAnchor: .scene(.topTrailing),
-            contentAlignment: .bottomTrailing
-        ) {
-            voiceButton
         }
         // Click sound for any tap; simultaneous so buttons still receive it.
         .simultaneousGesture(TapGesture().onEnded { UISounds.shared.tap() })
@@ -336,41 +332,6 @@ struct ExploreView: View {
         .padding(.bottom, 24)
     }
 
-    /// Voice search, docked on its own above the window's top-right corner.
-    private var voiceButton: some View {
-        Button { listening.toggle() } label: {
-            HStack(spacing: 10) {
-                if listening {
-                    HStack(spacing: 3) {
-                        ForEach(0..<5, id: \.self) { i in
-                            Capsule().fill(.white).frame(width: 3, height: 18)
-                                .phaseAnimator([0.3, 1.0]) { view, scale in
-                                    view.scaleEffect(y: scale)
-                                } animation: { _ in .easeInOut(duration: 0.45).delay(Double(i) * 0.15) }
-                        }
-                    }
-                    Text("Listening…").font(.system(size: 17, weight: .semibold))
-                } else {
-                    Image(systemName: "mic").font(.system(size: 18, weight: .semibold))
-                }
-            }
-            .padding(.horizontal, listening ? 18 : 0)
-            .frame(minWidth: 44, minHeight: 44)
-            .background(.white.opacity(listening ? 0.26 : 0.08), in: Capsule())
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .hoverEffect()
-        .accessibilityLabel("Search by voice")
-        .accessibilityAddTraits(listening ? .isSelected : [])
-        .foregroundStyle(.white)
-        .padding(8)
-        .glassBackgroundEffect(in: Capsule())
-        .simultaneousGesture(TapGesture().onEnded { UISounds.shared.tap() })
-        .animation(.easeOut(duration: 0.2), value: listening)
-        .padding(.bottom, 24)
-    }
-
     // MARK: - Main panel
 
     @ViewBuilder
@@ -389,6 +350,8 @@ struct ExploreView: View {
             ExhibitionsView(hovered: $hovered)
         case .environments:
             EnvironmentsView()
+        case .search:
+            searchPage
         case .settings:
             SettingsView()
         case .library where signedInUsername != nil:
@@ -591,6 +554,124 @@ struct ExploreView: View {
             .padding(.top, 40)
             .padding(.horizontal, 40)
             .padding(.bottom, 40)
+        }
+    }
+
+    // MARK: - Search
+
+    private var searchWords: [Substring] { query.split(whereSeparator: \.isWhitespace) }
+
+    private func matches(_ fields: String...) -> Bool {
+        let text = fields.joined(separator: " ")
+        return searchWords.allSatisfy { text.localizedCaseInsensitiveContains($0) }
+    }
+
+    /// Every catalog story whose title, genre, summary or author contains
+    /// each word of the query.
+    private var searchResults: [ExploreStory] {
+        guard !searchWords.isEmpty else { return [] }
+        return ([ExploreStory.featured] + ExploreStory.catalog).filter {
+            matches($0.title, $0.genre, $0.summary, $0.author)
+        }
+    }
+
+    /// The signed-in user's own StoryMaps whose title or summary match.
+    private var libraryResults: [ArcGISOnlineSession.StoryMapItem] {
+        guard !searchWords.isEmpty, signedInUsername != nil else { return [] }
+        return appModel.libraryItems.filter { matches($0.title, $0.summary) }
+    }
+
+    private var searchPage: some View {
+        let results = searchResults
+        let library = libraryResults
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Search")
+                    .font(.system(size: 40, weight: .bold))
+                    .padding(.horizontal, 16)
+
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.white.opacity(0.7))
+                        .accessibilityHidden(true)
+                    TextField("Stories, genres, authors", text: $query)
+                        .textFieldStyle(.plain)
+                        .autocorrectionDisabled()
+                        .submitLabel(.search)
+                    if !query.isEmpty {
+                        Button { query = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear search")
+                    }
+                }
+                .font(.system(size: 19))
+                .padding(.horizontal, 22)
+                .frame(height: 56)
+                .background(.white.opacity(0.08), in: Capsule())
+                .padding(.horizontal, 16)
+
+                if searchWords.isEmpty {
+                    Text(signedInUsername == nil
+                         ? "Find stories by title, genre or author."
+                         : "Find stories by title, genre or author, including your own library.")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .frame(maxWidth: .infinity, minHeight: 300)
+                } else if results.isEmpty && library.isEmpty {
+                    Text("No stories match “\(query)”.")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .frame(maxWidth: .infinity, minHeight: 300)
+                } else {
+                    if !library.isEmpty {
+                        if let error = appModel.openStoryError {
+                            Text(error)
+                                .font(.system(size: 15))
+                                .foregroundStyle(Color(red: 1, green: 0.78, blue: 0.72))
+                                .padding(.horizontal, 16)
+                        }
+                        searchSection("Your Library", count: library.count) {
+                            ForEach(library) { libraryCard($0) }
+                        }
+                    }
+                    if !results.isEmpty {
+                        searchSection("Explore", count: results.count) {
+                            ForEach(results) { exploreCard($0) }
+                        }
+                    }
+                }
+            }
+            .padding(.top, 40)
+            .padding(.horizontal, 40)
+            .padding(.bottom, 40)
+        }
+    }
+
+    private func searchSection(_ title: String, count: Int, @ViewBuilder cards: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(title.uppercased())
+                    .tracking(1.6)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Color(hex: 0xF0A050))
+                Text(count == 1 ? "1 story" : "\(count) stories")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 260, maximum: 340), spacing: 28, alignment: .top)],
+                spacing: 28
+            ) {
+                cards()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
         }
     }
 

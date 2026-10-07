@@ -11,6 +11,7 @@ import SwiftUI
 struct SpatialReferenceApp: App {
 
     @State private var appModel = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -28,6 +29,12 @@ struct SpatialReferenceApp: App {
             }
             .environment(appModel)
             .task { await appModel.restoreSession() }
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                appModel.backgroundMusic.setAppActive(phase != .background)
+            }
+            .onChange(of: appModel.narrationPlayer.isSpeaking && !appModel.narrationPlayer.isPaused) { _, speaking in
+                appModel.backgroundMusic.setDucked(speaking)
+            }
         }
         .defaultSize(width: 1280, height: 960)
 

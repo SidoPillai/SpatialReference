@@ -9,6 +9,8 @@ import SwiftUI
 enum SettingsKey {
     static let tapSounds = "settings.tapSounds"
     static let hoverChime = "settings.hoverChime"
+    static let backgroundMusic = "settings.backgroundMusic"
+    static let backgroundMusicTrack = "settings.backgroundMusicTrack"
     static let defaultEnvironment = "settings.defaultEnvironment"
 }
 
@@ -19,6 +21,8 @@ struct SettingsView: View {
 
     @AppStorage(SettingsKey.tapSounds) private var tapSounds = true
     @AppStorage(SettingsKey.hoverChime) private var hoverChime = true
+    @AppStorage(SettingsKey.backgroundMusic) private var backgroundMusic = true
+    @AppStorage(SettingsKey.backgroundMusicTrack) private var backgroundMusicTrack = MusicTrack.defaultID
     @AppStorage(SettingsKey.defaultEnvironment) private var defaultEnvironment = ""
 
     private var session: ArcGISOnlineSession { appModel.arcGISSession }
@@ -55,6 +59,20 @@ struct SettingsView: View {
                 } footer: {
                     Text("Narration audio isn’t affected by these settings.")
                 }
+
+                Section {
+                    Toggle("Background music", isOn: $backgroundMusic)
+                    Picker("Track", selection: $backgroundMusicTrack) {
+                        ForEach(MusicTrack.catalog) { Text($0.title).tag($0.id) }
+                    }
+                    .disabled(!backgroundMusic)
+                } header: {
+                    Text("Music")
+                } footer: {
+                    Text("Music softens automatically while a story is narrated.")
+                }
+                .onChange(of: backgroundMusic) { appModel.backgroundMusic.refresh() }
+                .onChange(of: backgroundMusicTrack) { appModel.backgroundMusic.refresh() }
 
                 Section {
                     Picker("Default environment", selection: $defaultEnvironment) {

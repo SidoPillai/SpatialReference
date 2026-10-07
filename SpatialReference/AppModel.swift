@@ -22,6 +22,7 @@ class AppModel {
 
     let arcGISSession = ArcGISOnlineSession()
     let narrationPlayer = NarrationPlayer()
+    let backgroundMusic = BackgroundMusicPlayer()
 
     /// Milestone-1 demo story: Esri's public "Google photorealistic 3D
     /// basemap" StoryMap, picked for its real 3D scene camera viewpoints.

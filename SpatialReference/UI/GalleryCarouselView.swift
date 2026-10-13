@@ -99,7 +99,7 @@ private struct GalleryPage: View {
 
     private enum ModelState {
         case loading
-        case ready(Model3DAsset)
+        case ready(InteractiveModel)
         case failed(String)
     }
 
@@ -171,17 +171,27 @@ private struct GalleryPage: View {
             }
             .padding(20)
             .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 20))
-        case .ready(let asset):
-            Model3D(asset: asset) { model in
-                model.resizable().aspectRatio(contentMode: .fit)
+        case .ready(let model):
+            // A RealityView rather than Model3D, which is display-only: the
+            // model's entities have to receive taps for the behaviors authored
+            // into a `.reality` file to run, as they do in Quick Look.
+            GeometryReader3D { geometry in
+                RealityView { content in
+                    content.add(model.pivot)
+                } update: { content in
+                    let frame = content.convert(geometry.frame(in: .local), from: .local, to: content)
+                    model.fit(
+                        in: frame,
+                        yaw: yaw + dragTranslation.width * 0.4,
+                        pitch: pitch + dragTranslation.height * 0.4,
+                        zoom: zoom * pinch
+                    )
+                }
+                .gesture(SpatialTapGesture().targetedToAnyEntity().onEnded { model.tap($0.entity) })
             }
-            .rotation3DEffect(.degrees(pitch + dragTranslation.height * 0.4), axis: .x)
-            .rotation3DEffect(.degrees(yaw + dragTranslation.width * 0.4), axis: .y)
-            .scaleEffect(x: zoom * pinch, y: zoom * pinch, z: zoom * pinch)
             .padding(56)
-            // Model3D is display-only, so interaction is added here. The
-            // gestures cover the whole card (a child gesture wins over the
-            // carousel's scrolling; the arrows and dots still page).
+            // Turning and zooming cover the whole card (a child gesture wins
+            // over the carousel's scrolling; the arrows and dots still page).
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
             .gesture(
@@ -203,7 +213,7 @@ private struct GalleryPage: View {
                 withAnimation(.easeOut(duration: 0.3)) { yaw = 0; pitch = 0; zoom = 1 }
             }
             .overlay(alignment: .bottom) {
-                Text("Drag to rotate · Pinch to zoom · Double-tap to reset")
+                Text("Tap to interact · Drag to rotate · Pinch to zoom · Double-tap to reset")
                     .font(.system(size: 13, weight: .medium))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
@@ -247,15 +257,68 @@ private struct GalleryPage: View {
             let url = try await StoryAssetStore.modelURL(
                 itemID: itemID, resourceName: resourceName, session: appModel.arcGISSession
             )
-            let asset = try await Model3DAsset(url: url)
-            // Quick Look-style models often carry an animation; start it.
-            asset.selectedAnimation = asset.availableAnimations.first
-            asset.animationPlaybackController?.resume()
-            modelState = .ready(asset)
+            let entity = try await Entity(contentsOf: url)
+            modelState = .ready(InteractiveModel(entity, isRealityFile: url.pathExtension.lowercased() == "reality"))
         } catch is CancellationError {
             return
         } catch {
             modelState = .failed(error.localizedDescription)
         }
+    }
+}
+
+/// A loaded 3D model made tappable and wrapped in a pivot, so it can be
+/// centred, scaled to the card and turned about its own middle.
+@MainActor
+final class InteractiveModel {
+    let pivot = Entity()
+    /// The model's largest dimension at scale 1, in metres.
+    private let extent: Float
+
+    init(_ model: Entity, isRealityFile: Bool) {
+        // Taps only reach entities that are input targets with a collision
+        // shape; keep any shapes the author set up and fill in the rest.
+        Self.addMissingCollisionShapes(to: model)
+        model.components.set(InputTargetComponent())
+
+        // A plain USDZ just loops its animation, as Quick Look does. A
+        // `.reality` scene drives its own animations from its behaviors.
+        if !isRealityFile, let animation = model.availableAnimations.first {
+            model.playAnimation(animation.repeat())
+        }
+
+        let bounds = model.visualBounds(relativeTo: nil)
+        extent = bounds.extents.max()
+        model.position -= bounds.center
+        pivot.addChild(model)
+    }
+
+    /// Centres the model in `frame` (in the pivot's parent space), sized so it
+    /// stays inside the card whichever way it's turned.
+    func fit(in frame: BoundingBox, yaw: Double, pitch: Double, zoom: Double) {
+        guard extent > 0 else { return }
+        let fitted = min(frame.extents.x, frame.extents.y) / extent
+        pivot.scale = .init(repeating: fitted * Float(zoom))
+        pivot.orientation = simd_quatf(angle: Float(yaw) * .pi / 180, axis: [0, 1, 0])
+            * simd_quatf(angle: Float(pitch) * .pi / 180, axis: [1, 0, 0])
+        // Sit in front of the card rather than half sunk into it.
+        pivot.position = [frame.center.x, frame.center.y, frame.min.z + extent * fitted / 2]
+    }
+
+    /// Runs the tap-triggered behaviors of the tapped entity, or of the
+    /// nearest ancestor that has any (the trigger is often on a parent group).
+    func tap(_ entity: Entity) {
+        var target: Entity? = entity
+        while let current = target, current !== pivot {
+            if current.applyTapForBehaviors() { return }
+            target = current.parent
+        }
+    }
+
+    private static func addMissingCollisionShapes(to entity: Entity) {
+        if entity.components.has(ModelComponent.self), !entity.components.has(CollisionComponent.self) {
+            entity.generateCollisionShapes(recursive: false)
+        }
+        entity.children.forEach(addMissingCollisionShapes)
     }
 }

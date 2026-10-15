@@ -273,9 +273,10 @@ private struct GalleryPage: View {
 final class InteractiveModel {
     let pivot = Entity()
     /// The model's largest dimension at scale 1, in metres.
-    private let extent: Float
+    let extent: Float
 
-    init(_ model: Entity, isRealityFile: Bool) {
+    /// Pass `bounds` for content RealityKit can't measure, such as splats.
+    init(_ model: Entity, isRealityFile: Bool, bounds: BoundingBox? = nil) {
         // Taps only reach entities that are input targets with a collision
         // shape; keep any shapes the author set up and fill in the rest.
         Self.addMissingCollisionShapes(to: model)
@@ -287,7 +288,7 @@ final class InteractiveModel {
             model.playAnimation(animation.repeat())
         }
 
-        let bounds = model.visualBounds(relativeTo: nil)
+        let bounds = bounds ?? model.visualBounds(relativeTo: nil)
         extent = bounds.extents.max()
         model.position -= bounds.center
         pivot.addChild(model)

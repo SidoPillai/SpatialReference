@@ -68,5 +68,24 @@ struct SpatialReferenceApp: App {
                 }
         }
         .immersionStyle(selection: .constant(.mixed), in: .mixed)
+
+        ImmersiveSpace(id: appModel.environmentSpaceID) {
+            EnvironmentImmersiveView()
+                .environment(appModel)
+                .onAppear {
+                    appModel.environmentSpaceState = .open
+                }
+                .onDisappear {
+                    appModel.environmentSpaceState = .closed
+                    appModel.activeEnvironmentID = nil
+                }
+        }
+        // Panoramas are progressive: the Digital Crown dials them from a
+        // portal in front of you up to fully surrounding you. Imported
+        // models are mixed, so they sit in your room.
+        .immersionStyle(selection: Binding<any ImmersionStyle>(
+            get: { appModel.activeEnvironment?.isModel == true ? MixedImmersionStyle() as any ImmersionStyle : ProgressiveImmersionStyle() },
+            set: { _ in }
+        ), in: .mixed, .progressive)
     }
 }

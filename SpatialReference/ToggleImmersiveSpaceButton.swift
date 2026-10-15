@@ -32,6 +32,8 @@ struct ToggleImmersiveSpaceButton<Label: View>: View {
                         // Only set .closed in ImmersiveView.onDisappear().
 
                     case .closed:
+                        // Leave any open environment first.
+                        await appModel.dismissOpenImmersiveSpace(using: dismissImmersiveSpace)
                         appModel.immersiveSpaceState = .inTransition
                         switch await openImmersiveSpace(id: appModel.immersiveSpaceID) {
                             case .opened:
@@ -57,7 +59,7 @@ struct ToggleImmersiveSpaceButton<Label: View>: View {
         } label: {
             label(appModel.immersiveSpaceState == .open)
         }
-        .disabled(appModel.immersiveSpaceState == .inTransition)
+        .disabled(appModel.isImmersiveSpaceInTransition)
         .animation(.none, value: 0)
         .fontWeight(.semibold)
     }

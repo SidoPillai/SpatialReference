@@ -14,12 +14,53 @@ class AppModel {
     let immersiveSpaceID = "ImmersiveSpace"
     let teleportPortalWindowID = "TeleportPortal"
     let tourModelWindowID = "TourModel"
+    let environmentSpaceID = "EnvironmentSpace"
     enum ImmersiveSpaceState {
         case closed
         case inTransition
         case open
     }
+    /// The asset viewer's immersive space.
     var immersiveSpaceState = ImmersiveSpaceState.closed
+    /// The environment immersive space, showing `activeEnvironment`.
+    var environmentSpaceState = ImmersiveSpaceState.closed
+    var activeEnvironmentID: String?
+    /// 360° images and 3D models the user added from Files.
+    let importedEnvironments = ImportedEnvironmentStore()
+
+    /// What the environment space shows: a catalog panorama, or an imported
+    /// panorama or model.
+    var activeEnvironment: ActiveEnvironment? {
+        guard let id = activeEnvironmentID else { return nil }
+        if let env = ImmersiveEnvironment.catalog.first(where: { $0.id == id }), let panorama = env.panorama {
+            return ActiveEnvironment(title: env.title, subtitle: env.location, content: .bundledPanorama(panorama))
+        }
+        guard let item = importedEnvironments.items.first(where: { $0.id == id }) else { return nil }
+        let url = importedEnvironments.url(for: item)
+        let content: ActiveEnvironment.Content = switch item.kind {
+        case .panorama: .panorama(url)
+        case .model: .model(url, isRealityFile: item.isRealityFile)
+        case .pointCloud: .pointCloud(url)
+        }
+        return ActiveEnvironment(title: item.title, subtitle: item.subtitle, content: content)
+    }
+
+    var isImmersiveSpaceInTransition: Bool {
+        immersiveSpaceState == .inTransition || environmentSpaceState == .inTransition
+    }
+
+    /// visionOS shows one immersive space at a time, so opening one first
+    /// closes whichever is up. Each space's onDisappear marks it closed.
+    func dismissOpenImmersiveSpace(using dismiss: DismissImmersiveSpaceAction) async {
+        if immersiveSpaceState == .open {
+            immersiveSpaceState = .inTransition
+        } else if environmentSpaceState == .open {
+            environmentSpaceState = .inTransition
+        } else {
+            return
+        }
+        await dismiss()
+    }
 
     let arcGISSession = ArcGISOnlineSession()
     let narrationPlayer = NarrationPlayer()

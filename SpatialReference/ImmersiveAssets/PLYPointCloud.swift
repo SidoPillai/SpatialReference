@@ -392,6 +392,35 @@ nonisolated struct PLYPointCloud: Sendable {
         return keeping((0..<limit).map { $0 * count / limit })
     }
 
+    /// The points within the core bounds (plus `margin` of their size on each
+    /// side), moved so the core's center is the origin.
+    func centeredOnCore(margin: Float = 0.25) -> PLYPointCloud {
+        let pad = extents * margin
+        let lo = coreMin - pad, hi = coreMax + pad
+        var kept: [Int] = []
+        kept.reserveCapacity(count)
+        for i in 0..<count {
+            let x = positions[i * 3], y = positions[i * 3 + 1], z = positions[i * 3 + 2]
+            if x >= lo.x, x <= hi.x, y >= lo.y, y <= hi.y, z >= lo.z, z <= hi.z { kept.append(i) }
+        }
+        var result = kept.count == count ? self : keeping(kept)
+        let c = center
+        var minP = SIMD3<Float>(repeating: .infinity), maxP = SIMD3<Float>(repeating: -.infinity)
+        for i in 0..<result.count {
+            result.positions[i * 3] -= c.x
+            result.positions[i * 3 + 1] -= c.y
+            result.positions[i * 3 + 2] -= c.z
+            let p = SIMD3(result.positions[i * 3], result.positions[i * 3 + 1], result.positions[i * 3 + 2])
+            minP = pointwiseMin(minP, p)
+            maxP = pointwiseMax(maxP, p)
+        }
+        result.boundsMin = minP
+        result.boundsMax = maxP
+        result.coreMin = coreMin - c
+        result.coreMax = coreMax - c
+        return result
+    }
+
     private func keeping(_ kept: [Int]) -> PLYPointCloud {
         func gather(_ values: [Float], _ width: Int) -> [Float] {
             var out = [Float]()
@@ -515,12 +544,15 @@ extension PLYPointCloud {
     @MainActor
     /// On device, at most `splatLimit` of the most visible splats are shown.
     func makeEntity(splatLimit: Int = maxSplats) async throws -> Entity {
+        // RealityKit culls splats with bounds taken from the raw positions, so
+        // stray far-off splats, or an origin far from the subject, make it
+        // drop the whole capture from some viewpoints.
+        let cloud = centeredOnCore()
         #if targetEnvironment(simulator)
-        let points = try await makePointMesh()
+        let points = try await cloud.makePointMesh()
         #else
-        let points = try makeSplats(limit: min(splatLimit, Self.maxSplats))
+        let points = try cloud.makeSplats(limit: min(splatLimit, Self.maxSplats))
         #endif
-        points.position = -center
         let content = Entity()
         content.addChild(points)
         if isGaussianSplat {

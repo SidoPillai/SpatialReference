@@ -123,7 +123,11 @@ struct ImportedEnvironmentTests {
 struct PLYPointCloudTests {
 
     /// A binary little-endian 3DGS file with `count` splats.
-    static func splatPLY(count: Int, opacity: (Int) -> Float = { _ in 2 }) -> Data {
+    static func splatPLY(
+        count: Int,
+        opacity: (Int) -> Float = { _ in 2 },
+        position: (Int) -> SIMD3<Float> = { i in [Float(i), Float(i) * 2, -Float(i)] }
+    ) -> Data {
         let names = ["x", "y", "z", "nx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "opacity",
                      "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"]
         var data = Data("""
@@ -136,7 +140,7 @@ struct PLYPointCloudTests {
         """.utf8)
         for i in 0..<count {
             // Position i, color dc 1, opacity 2, scale -3, rotation identity (w first).
-            let values: [Float] = [Float(i), Float(i) * 2, -Float(i), 0, 0, 0, 1, 1, 1, opacity(i), -3, -3, -3, 2, 0, 0, 0]
+            let values: [Float] = [position(i).x, position(i).y, position(i).z, 0, 0, 0, 1, 1, 1, opacity(i), -3, -3, -3, 2, 0, 0, 0]
             for v in values { withUnsafeBytes(of: v.bitPattern.littleEndian) { data.append(contentsOf: $0) } }
         }
         return data
@@ -217,6 +221,18 @@ struct PLYPointCloudTests {
         let entity = try await cloud.makeEntity()
         #expect(entity.children.contains { $0.components.has(CollisionComponent.self) })
         #expect(entity.children.contains { $0.position == -cloud.center })
+    }
+
+    @Test func centersOnTheCoreAndDropsStrays() throws {
+        // 200 splats spread from 100 to 299 on each axis, plus one stray far out.
+        let cloud = try PLYPointCloud(data: Self.splatPLY(count: 201, position: { i in
+            i == 200 ? [5000, 5000, 5000] : SIMD3(repeating: 100 + Float(i))
+        }))
+        let core = cloud.centeredOnCore()
+        #expect(core.count == 200)
+        #expect(core.boundsMax.x < 150 && core.boundsMin.x > -150)
+        #expect(simd_length(core.center) < 1e-3)
+        #expect(core.extents == cloud.extents)
     }
 
     @Test func keepsTheMostVisibleSplatsWhenOverTheLimit() throws {

@@ -187,6 +187,13 @@ final class ArcGISOnlineSession {
         if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
             throw SessionError.httpError(httpResponse.statusCode, String(data: data, encoding: .utf8) ?? "")
         }
+        // The REST API reports many failures (missing resource, expired
+        // token) as HTTP 200 with a JSON `error` body.
+        if response.mimeType?.contains("json") == true || response.mimeType == "text/plain",
+           let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let error = body["error"] as? [String: Any] {
+            throw SessionError.httpError(error["code"] as? Int ?? 0, error["message"] as? String ?? "Request failed")
+        }
         return data
     }
 

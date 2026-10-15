@@ -67,6 +67,10 @@ enum StoryMapParser {
                 if !items.isEmpty {
                     chapters.append(Chapter(id: childID, narrationText: "", media: .gallery(items: items)))
                 }
+            case "tour":
+                if let media = makeTour(tourNode: node, nodes: nodes, resources: resources) {
+                    chapters.append(Chapter(id: childID, narrationText: "", media: media))
+                }
             default:
                 continue
             }
@@ -136,6 +140,88 @@ enum StoryMapParser {
             }
         }
         return items
+    }
+
+    /// Builds a guided tour from a `tour` node.
+    ///
+    /// The tour's `data.places` list the stops in order. Each place names a
+    /// `featureId` whose point lives in the `tour-map` node's `geometries`, a
+    /// `title` text node, `contents` (paragraph text and `audio` nodes) and a
+    /// `media` carousel whose first image is the stop's picture. That image's
+    /// `config.resource` points at the zip holding the stop's 3D model.
+    /// Places without a point are skipped, since they can't go on the map.
+    private static func makeTour(
+        tourNode: [String: Any],
+        nodes: [String: [String: Any]],
+        resources: [String: [String: Any]]
+    ) -> ChapterMedia? {
+        guard let data = tourNode["data"] as? [String: Any],
+              let places = data["places"] as? [[String: Any]] else { return nil }
+        let mapData = (data["map"] as? String).flatMap { nodes[$0] }?["data"] as? [String: Any]
+        let geometries = mapData?["geometries"] as? [String: [String: Any]] ?? [:]
+
+        var stops: [TourStop] = []
+        for (index, place) in places.enumerated() {
+            guard let featureID = place["featureId"] as? String,
+                  let point = (geometries[featureID]?["nodes"] as? [[String: Any]])?.first,
+                  let latitude = (point["lat"] as? NSNumber)?.doubleValue,
+                  let longitude = (point["long"] as? NSNumber)?.doubleValue else { continue }
+
+            let titleNode = (place["title"] as? String).flatMap { nodes[$0] }
+            let title = titleNode.flatMap { extractText(from: $0, nodes: nodes).first }.map(plainText) ?? ""
+
+            var paragraphs: [String] = []
+            var audioName: String?
+            for contentID in place["contents"] as? [String] ?? [] {
+                guard let content = nodes[contentID] else { continue }
+                if content["type"] as? String == "audio" {
+                    let audioResourceID = (content["data"] as? [String: Any])?["audio"] as? String ?? ""
+                    audioName = audioName ?? itemResourceName(resources[audioResourceID], ofTypes: ["audio"])
+                } else {
+                    paragraphs.append(contentsOf: extractText(from: content, nodes: nodes).map(plainText))
+                }
+            }
+
+            // The first image of the stop's media carousel (or the media
+            // node itself when it's a bare image).
+            var imageNode = (place["media"] as? String).flatMap { nodes[$0] }
+            if imageNode?["type"] as? String != "image" {
+                imageNode = (imageNode?["children"] as? [String] ?? [])
+                    .lazy.compactMap { nodes[$0] }
+                    .first { $0["type"] as? String == "image" }
+            }
+            let imageData = imageNode?["data"] as? [String: Any]
+            let posterName = itemResourceName(resources[imageData?["image"] as? String ?? ""], ofTypes: ["image"])
+            let imageConfig = imageNode?["config"] as? [String: Any]
+            let modelResourceID = imageConfig?["resource"] as? String ?? imageConfig?["resourceId"] as? String
+            let modelName = modelResourceID.flatMap { modelResourceName(resources[$0]) }
+
+            stops.append(TourStop(
+                id: place["id"] as? String ?? featureID,
+                title: title.isEmpty ? "Stop \(index + 1)" : title,
+                narrationText: paragraphs.filter { !$0.isEmpty }.joined(separator: " "),
+                latitude: latitude,
+                longitude: longitude,
+                audioResourceName: audioName,
+                posterResourceName: posterName,
+                modelResourceName: modelName
+            ))
+        }
+        guard !stops.isEmpty else { return nil }
+        return .tour(stops: stops, isThreeD: mapData?["mode"] as? String == "3d")
+    }
+
+    /// The filename of a resource holding a 3D model. Gallery models are typed
+    /// `usdz`/`reality` item resources; tour image nodes reference untyped
+    /// `file-resource` zips. Either way the file is fetched as an item resource.
+    private static func modelResourceName(_ resource: [String: Any]?) -> String? {
+        guard let resource, let data = resource["data"] as? [String: Any],
+              let name = data["resourceId"] as? String else { return nil }
+        if let type = resource["type"] as? String {
+            return ["usdz", "reality"].contains(type) ? name : nil
+        }
+        let fileExtension = (name as NSString).pathExtension.lowercased()
+        return (["zip"] + StoryAssetStore.modelExtensions).contains(fileExtension) ? name : nil
     }
 
     /// The item-resource filename of an `item-resource`-provider resource of
@@ -219,6 +305,17 @@ enum StoryMapParser {
         let heading = camera["heading"] as? Double ?? 0
         let tilt = camera["tilt"] as? Double ?? 0
         return SceneCamera(wkid: wkid, x: x, y: y, z: z, heading: heading, tilt: tilt)
+    }
+
+    /// Rich text as plain, speakable text: tags dropped, entities decoded,
+    /// whitespace collapsed.
+    private nonisolated static func plainText(_ html: String) -> String {
+        let stripped = html
+            .replacingOccurrences(of: "<br\\s*/?>", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        return decodeHTMLEntities(stripped)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private nonisolated static let namedHTMLEntities: [String: String] = [

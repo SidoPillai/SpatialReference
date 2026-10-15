@@ -63,6 +63,17 @@ enum StoryAssetStore {
         return data
     }
 
+    /// A local copy of a resource (e.g. a narration mp3, which `AVPlayer`
+    /// plays from disk), downloaded the first time it's asked for.
+    static func fileURL(itemID: String, resourceName: String, session: ArcGISOnlineSession) async throws -> URL {
+        let target = try directory(for: itemID).appendingPathComponent(cacheName(for: resourceName, extension: nil))
+        if isCached(target) { return target }
+
+        let data = try await session.fetchResourceData(itemID: itemID, resourceName: resourceName)
+        try data.write(to: target, options: .atomic)
+        return target
+    }
+
     private static func isCached(_ url: URL) -> Bool {
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
         return size > 0

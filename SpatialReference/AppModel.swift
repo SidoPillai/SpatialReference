@@ -13,6 +13,7 @@ import SwiftUI
 class AppModel {
     let immersiveSpaceID = "ImmersiveSpace"
     let teleportPortalWindowID = "TeleportPortal"
+    let tourModelWindowID = "TourModel"
     enum ImmersiveSpaceState {
         case closed
         case inTransition
@@ -22,6 +23,7 @@ class AppModel {
 
     let arcGISSession = ArcGISOnlineSession()
     let narrationPlayer = NarrationPlayer()
+    let tourAudio = TourAudioPlayer()
     let backgroundMusic = BackgroundMusicPlayer()
 
     /// Milestone-1 demo story: Esri's public "Google photorealistic 3D

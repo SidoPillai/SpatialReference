@@ -1,0 +1,217 @@
+{
+  "nodes": {
+    "n-1": {
+      "children": ["n-2", "n-3", "n-7", "n-8", "n-4"],
+      "config": { "coverDate": "none" },
+      "data": { "storyTheme": "r-5" },
+      "type": "story"
+    },
+    "n-1i0SKW": {
+      "data": { "image": "r-Cx6Jut" },
+      "config": { "resource": "r-x80ECj" },
+      "type": "image"
+    },
+    "n-1KonYb": {
+      "config": { "size": "wide" },
+      "data": { "audio": "r-SURJwp" },
+      "type": "audio"
+    },
+    "n-2": {
+      "children": ["n-Av3cUJ"],
+      "data": {
+        "byline": "Siddesh Pillai",
+        "summary": "",
+        "title": "Discover the origins of Pyramids",
+        "titlePanelHorizontalPosition": "start",
+        "titlePanelStyle": "gradient",
+        "titlePanelVerticalPosition": "bottom",
+        "type": "full"
+      },
+      "type": "storycover"
+    },
+    "n-3": {
+      "config": { "isHidden": true },
+      "data": { "links": [] },
+      "type": "navigation"
+    },
+    "n-4": {
+      "children": ["n-8tCxFy", "n-e0wp1C", "n-JhpXt8"],
+      "data": {
+        "description": "Uploaded media and draft placeholder illustrations are stored as private ArcGIS item resources. Replace placeholders and review media rights, captions, and attribution before publishing. Reference-only planning files are not retained.",
+        "heading": "Credits"
+      },
+      "type": "credits"
+    },
+    "n-4gla0L": {
+      "config": { "size": "wide" },
+      "data": { "text": "Pyramid of Menkaure", "type": "h3" },
+      "type": "text"
+    },
+    "n-5di8A7": { "children": ["n-1i0SKW"], "type": "carousel" },
+    "n-6L3ZCV": { "data": { "image": "r-1O9hBJ" }, "type": "image" },
+    "n-7": { "data": { "text": "", "type": "paragraph" }, "type": "text" },
+    "n-8": {
+      "data": {
+        "accentColor": "accentColor1",
+        "map": "n-cwtEPZ",
+        "narrativePanelPosition": "start",
+        "narrativePanelSize": "small",
+        "places": [
+          {
+            "contents": ["n-KQ2Hkd", "n-Y0unvN"],
+            "featureId": "57ab49da-4050-4e66-88fc-12c871c4c591",
+            "id": "n-cQeMz5",
+            "media": "n-5di8A7",
+            "title": "n-AS5ciu"
+          },
+          {
+            "contents": ["n-8tntjB", "n-1KonYb"],
+            "featureId": "35e9ca8b-d19e-41c9-9c6c-59fc78fa5972",
+            "id": "n-VcaNnG",
+            "media": "n-Ay0QZ3",
+            "title": "n-Yb0vP2"
+          },
+          {
+            "contents": ["n-FXkkTg", "n-rCfqKH"],
+            "featureId": "97f420c9-2c8a-4e21-aca2-86158d3b74f6",
+            "id": "n-krWbdv",
+            "media": "n-DTjvkm",
+            "title": "n-4gla0L"
+          },
+          {
+            "contents": ["n-c7krG1", "n-rC0jNW"],
+            "featureId": "4c8c160c-0d9f-41af-adc7-27b700bf355a",
+            "id": "n-7DlNJn",
+            "media": "n-rIUy3D",
+            "title": "n-xIfZjP"
+          }
+        ],
+        "subtype": "media-focused",
+        "type": "guided-tour"
+      },
+      "type": "tour"
+    },
+    "n-8tCxFy": { "data": { "text": "", "type": "h2" }, "type": "text" },
+    "n-8tntjB": {
+      "config": { "size": "wide" },
+      "data": {
+        "text": "<strong>Khafre’s pyramid is the second major royal pyramid at Giza. It can appear taller than Khufu’s because it stands on higher ground, although it is actually smaller. A small cap of original limestone casing remains near its peak. Its complex links the pyramid with a mortuary temple, causeway and valley temple.</strong>",
+        "type": "paragraph"
+      },
+      "type": "text"
+    },
+    "n-AS5ciu": {
+      "config": { "size": "wide" },
+      "data": { "text": "Pyramid of Kufu", "type": "h3" },
+      "type": "text"
+    },
+    "n-Av3cUJ": {
+      "data": { "image": "r-CPdEFP" },
+      "config": { "resource": "r-2CCqtd" },
+      "type": "image"
+    },
+    "n-Ay0QZ3": { "children": ["n-DZEfn7"], "type": "carousel" },
+    "n-c7krG1": {
+      "config": { "size": "wide" },
+      "data": {
+        "text": "<strong>The Great Sphinx combines the body of a lion with a human head wearing royal headdress. It was carved directly from limestone bedrock near Khafre’s valley temple. Most archaeological evidence points to Khafre’s reign, though aspects of its history remain debated. The monument connects kingship with strength, guardianship and sacred landscape.</strong>",
+        "type": "paragraph"
+      },
+      "type": "text"
+    },
+    "n-cwtEPZ": {
+      "data": {
+        "defaultScale": 160000,
+        "featureStyles": false,
+        "geometries": {
+          "4c8c160c-0d9f-41af-adc7-27b700bf355a": {
+            "id": "4c8c160c-0d9f-41af-adc7-27b700bf355a",
+            "nodes": [{ "lat": 30.013651599999999, "long": 31.208138300000002 }],
+            "type": "POINT_NUMBERED_TOUR"
+          },
+          "35e9ca8b-d19e-41c9-9c6c-59fc78fa5972": {
+            "id": "35e9ca8b-d19e-41c9-9c6c-59fc78fa5972",
+            "nodes": [{ "lat": 31.176555886111402, "long": 30.099365975693701 }],
+            "type": "POINT_NUMBERED_TOUR"
+          },
+          "57ab49da-4050-4e66-88fc-12c871c4c591": {
+            "id": "57ab49da-4050-4e66-88fc-12c871c4c591",
+            "nodes": [{ "lat": 30.036089197604198, "long": 31.242123174329301 }],
+            "type": "POINT_NUMBERED_TOUR"
+          },
+          "97f420c9-2c8a-4e21-aca2-86158d3b74f6": {
+            "id": "97f420c9-2c8a-4e21-aca2-86158d3b74f6",
+            "nodes": [{ "lat": 30.778360599999999, "long": 31.996866700000002 }],
+            "type": "POINT_NUMBERED_TOUR"
+          }
+        },
+        "locate": true,
+        "mode": "3d"
+      },
+      "type": "tour-map"
+    },
+    "n-DTjvkm": { "children": ["n-6L3ZCV"], "type": "carousel" },
+    "n-DZEfn7": {
+      "data": { "image": "r-eC4wcn" },
+      "config": { "resource": "r-gylepr" },
+      "type": "image"
+    },
+    "n-e0wp1C": { "data": { "text": "", "type": "paragraph" }, "type": "text" },
+    "n-FXkkTg": {
+      "config": { "size": "wide" },
+      "data": {
+        "text": "<strong>Menkaure’s pyramid is the smallest of the three principal Giza pyramids. Its surviving lower courses include red granite casing, while upper portions were faced with limestone. Nearby subsidiary pyramids and temples show that the site was a complex ceremonial landscape, not simply three isolated stone monuments.</strong>",
+        "type": "paragraph"
+      },
+      "type": "text"
+    },
+    "n-JhpXt8": { "data": { "attribution": "", "content": "" }, "type": "attribution" },
+    "n-KQ2Hkd": {
+      "config": { "size": "wide" },
+      "data": {
+        "text": "<strong>The Great Pyramid was built for Pharaoh Khufu. Originally about 146.6 meters tall, it is the largest pyramid at Giza and the only largely surviving Wonder of the Ancient World. Millions of limestone blocks form its immense mass, originally covered in smooth white casing stones. The pyramid was the central part of a larger royal funerary complex.</strong>",
+        "type": "paragraph"
+      },
+      "type": "text"
+    },
+    "n-rC0jNW": { "config": { "size": "wide" }, "data": { "audio": "r-rtxtq3" }, "type": "audio" },
+    "n-rCfqKH": { "config": { "size": "wide" }, "data": { "audio": "r-zWrKjE" }, "type": "audio" },
+    "n-rIUy3D": { "children": ["n-X46mwA"], "type": "carousel" },
+    "n-X46mwA": {
+      "data": { "image": "r-YM4LHP" },
+      "config": { "resource": "r-ITRr55" },
+      "type": "image"
+    },
+    "n-xIfZjP": {
+      "config": { "size": "wide" },
+      "data": { "text": "The Great Sphinx of Giza", "type": "h3" },
+      "type": "text"
+    },
+    "n-Y0unvN": { "config": { "size": "wide" }, "data": { "audio": "r-CRXyOg" }, "type": "audio" },
+    "n-Yb0vP2": {
+      "config": { "size": "wide" },
+      "data": { "text": "Pyramid of Kafre", "type": "h3" },
+      "type": "text"
+    }
+  },
+  "resources": {
+    "r-1O9hBJ": { "data": { "height": 2160, "provider": "item-resource", "resourceId": "l8-ow9FNPDMuWQq1CNMYL.jpg", "width": 3840 }, "type": "image" },
+    "r-5": { "data": { "themeBaseVariableOverrides": {}, "themeId": "obsidian" }, "type": "story-theme" },
+    "r-CPdEFP": { "data": { "height": 941, "provider": "item-resource", "resourceId": "pXHy9RsLYd7AKaX26P40b.png", "width": 1672 }, "type": "image" },
+    "r-CRXyOg": { "data": { "provider": "item-resource", "resourceId": "hrN2q5CS0WJNp4qB3JBWy.mp3" }, "type": "audio" },
+    "r-Cx6Jut": { "data": { "height": 1026, "provider": "item-resource", "resourceId": "b5cb8b74-46e4-46ab-ba33-d691a9530945.jpeg", "width": 1600 }, "type": "image" },
+    "r-eC4wcn": { "data": { "height": 2592, "provider": "item-resource", "resourceId": "z-PCqV8anou-wqKSGX_xT.jpg", "width": 3888 }, "type": "image" },
+    "r-rtxtq3": { "data": { "provider": "item-resource", "resourceId": "3hZLS7ebWwnkFAjvGRx7s.mp3" }, "type": "audio" },
+    "r-SURJwp": { "data": { "provider": "item-resource", "resourceId": "S0r0V9IXY0Nu-gTjG2CRU.mp3" }, "type": "audio" },
+    "r-YM4LHP": { "data": { "height": 1280, "provider": "item-resource", "resourceId": "c8ebda86-1f44-4418-98a5-f3706eb9cc2b.jpeg", "width": 1920 }, "type": "image" },
+    "r-zWrKjE": { "data": { "provider": "item-resource", "resourceId": "Mq-4Bb8ZGa6gJUBJqqPcp.mp3" }, "type": "audio" },
+    "r-x80ECj": { "data": { "provider": "file-resource", "resourceId": "1dpk5hd321y0cogo.zip" } },
+    "r-2CCqtd": { "data": { "provider": "file-resource", "resourceId": "352cxexgy36bmj42.zip" } },
+    "r-gylepr": { "data": { "provider": "file-resource", "resourceId": "7bl6f9guyjrd4bbt.zip" } },
+    "r-ITRr55": { "data": { "provider": "file-resource", "resourceId": "d45rfc8poj097vvw.zip" } },
+    "r-gFLmFe": { "data": { "provider": "file-resource", "resourceId": "qojm2zlcok8qdif8.zip" } },
+    "r-lPLlxN": { "data": { "provider": "file-resource", "resourceId": "xd4jp5cshb5jf1wy.zip" } },
+    "r-o5yTFv": { "data": { "provider": "file-resource", "resourceId": "y5sfbqm75s9m7k8t.zip" } }
+  },
+  "root": "n-1"
+}

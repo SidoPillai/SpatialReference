@@ -35,7 +35,7 @@ struct SpatialReferenceApp: App {
             .onChange(of: appModel.screen == .browser, initial: true) { _, viewing in
                 appModel.backgroundMusic.setViewingItem(viewing)
             }
-            .onChange(of: appModel.narrationPlayer.isSpeaking && !appModel.narrationPlayer.isPaused) { _, speaking in
+            .onChange(of: (appModel.narrationPlayer.isSpeaking && !appModel.narrationPlayer.isPaused) || appModel.tourAudio.isPlaying) { _, speaking in
                 appModel.backgroundMusic.setDucked(speaking)
             }
         }
@@ -47,6 +47,15 @@ struct SpatialReferenceApp: App {
         }
         .windowStyle(.volumetric)
         .defaultSize(width: 1, height: 0.7, depth: 1, in: .meters)
+
+        WindowGroup(id: appModel.tourModelWindowID, for: TourModelReference.self) { $reference in
+            if let reference {
+                TourModelVolumeView(reference: reference)
+                    .environment(appModel)
+            }
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)
 
         ImmersiveSpace(id: appModel.immersiveSpaceID) {
             AssetViewerImmersiveView()

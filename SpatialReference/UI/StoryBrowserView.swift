@@ -25,7 +25,10 @@ struct StoryBrowserView: View {
 
             VStack(spacing: 24) {
                 panel
-                narrationBar
+                // A tour has its own per-stop audio controls.
+                if !isTour {
+                    narrationBar
+                }
             }
             .padding(.horizontal, 64)
             .padding(.top, 40)
@@ -57,6 +60,10 @@ struct StoryBrowserView: View {
 
             if let chapter = appModel.currentChapter, let story = appModel.story, case .gallery(let items) = chapter.media {
                 GalleryCarouselView(itemID: story.itemID, items: items)
+                    .id(chapter.id)
+                    .frame(maxHeight: .infinity)
+            } else if let chapter = appModel.currentChapter, let story = appModel.story, case .tour(let stops, let isThreeD) = chapter.media {
+                TourView(itemID: story.itemID, stops: stops, isThreeD: isThreeD)
                     .id(chapter.id)
                     .frame(maxHeight: .infinity)
             } else if let chapter = appModel.currentChapter {
@@ -94,11 +101,14 @@ struct StoryBrowserView: View {
         .padding(.horizontal, 44)
         .padding(.bottom, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            Color(red: 98 / 255, green: 85 / 255, blue: 73 / 255).opacity(0.66),
-            in: RoundedRectangle(cornerRadius: 48)
-        )
-        .overlay(RoundedRectangle(cornerRadius: 48).strokeBorder(.white.opacity(0.16), lineWidth: 1))
+        // The border is drawn as part of the background, not an overlay: an
+        // overlay would sit in front of any 3D model in the panel and float
+        // towards the viewer.
+        .background {
+            RoundedRectangle(cornerRadius: 48)
+                .fill(Color(red: 98 / 255, green: 85 / 255, blue: 73 / 255).opacity(0.66))
+                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+        }
         .shadow(color: .black.opacity(0.35), radius: 45, y: 40)
     }
 
@@ -189,6 +199,9 @@ struct StoryBrowserView: View {
         case .gallery(let items):
             // Galleries are shown as a carousel in the main panel instead.
             mediaCardBody(badge: "Gallery", title: "\(items.count) items", subtitle: nil, actionTitle: nil, actionIcon: nil)
+        case .tour(let stops, _):
+            // Tours are shown as a map and stop panel in the main panel instead.
+            mediaCardBody(badge: "Tour", title: "\(stops.count) stops", subtitle: nil, actionTitle: nil, actionIcon: nil)
         }
     }
 
@@ -275,6 +288,11 @@ struct StoryBrowserView: View {
     }
 
     // MARK: - Narration bar
+
+    private var isTour: Bool {
+        if case .tour = appModel.currentChapter?.media { return true }
+        return false
+    }
 
     private var narrationText: String { appModel.currentChapter?.narrationText ?? "" }
 

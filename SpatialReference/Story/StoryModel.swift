@@ -30,6 +30,30 @@ enum ChapterMedia: Codable, Equatable {
     case embed(url: URL, title: String?)
     /// A StoryMaps gallery block, shown as a carousel of images and 3D models.
     case gallery(items: [GalleryItem])
+    /// A StoryMaps guided tour: numbered stops projected on a (usually 3D)
+    /// map, each with its own narration audio and media.
+    case tour(stops: [TourStop], isThreeD: Bool)
+}
+
+/// One numbered stop of a guided tour.
+struct TourStop: Codable, Equatable, Identifiable {
+    /// The tour place's id.
+    var id: String
+    var title: String
+    /// Plain text of the stop's paragraphs (HTML tags removed). Spoken with
+    /// text-to-speech when the stop has no recorded audio.
+    var narrationText: String
+    /// WGS84 position of the stop's point on the tour map.
+    var latitude: Double
+    var longitude: Double
+    /// Item-resource filename of the stop's narration recording (an mp3).
+    var audioResourceName: String?
+    /// Item-resource filename of the stop's image, shown as the model's
+    /// poster (or on its own when there's no model).
+    var posterResourceName: String?
+    /// Resource holding the stop's interactive 3D model: a `.zip` wrapping a
+    /// `.usdz` or `.reality` file, attached to the stop's image node.
+    var modelResourceName: String?
 }
 
 /// One page of a gallery carousel.

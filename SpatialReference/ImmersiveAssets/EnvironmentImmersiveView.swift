@@ -3,9 +3,11 @@
 //  SpatialReference
 //
 
+import ARKit
 import CoreGraphics
 import Foundation
 import OSLog
+import QuartzCore
 import RealityKit
 import SwiftUI
 
@@ -43,6 +45,8 @@ struct EnvironmentImmersiveView: View {
 
     @State private var root = Entity()
     @State private var model: InteractiveModel?
+    /// A Gaussian splat capture, shown from where it was captured.
+    @State private var scene: Entity?
     @State private var isLoading = false
     @State private var loadError: String?
     /// Set when RealityKit cuts back on a splat capture to stay within budget.
@@ -92,6 +96,7 @@ struct EnvironmentImmersiveView: View {
     private func load() async {
         root.children.removeAll()
         model = nil
+        scene = nil
         loadError = nil
         renderingNote = nil
         guard let env = appModel.activeEnvironment else { return }
@@ -121,6 +126,16 @@ struct EnvironmentImmersiveView: View {
                     renderingNote = "Showing the \(shown) most visible of \(total) splats, the most visionOS renders at once."
                 }
                 #endif
+                if cloud.isGaussianSplat {
+                    // Splats are views, often from a single photo: they only
+                    // look right from the capture's camera, so put that at the
+                    // viewer's eyes, life size, rather than shrink it onto a table.
+                    let scene = try await cloud.makeEntity(asScene: true)
+                    root.addChild(scene)
+                    self.scene = scene
+                    await placeSceneAtViewer()
+                    return
+                }
                 let extents = cloud.extents
                 let model = InteractiveModel(
                     try await cloud.makeEntity(), isRealityFile: false,
@@ -142,6 +157,42 @@ struct EnvironmentImmersiveView: View {
     @concurrent
     private nonisolated static func readPointCloud(_ url: URL) async throws -> PLYPointCloud {
         try PLYPointCloud(contentsOf: url)
+    }
+
+    /// Puts the scene's camera at the viewer's eyes, facing where they face
+    /// (level, ignoring head tilt).
+    private func placeSceneAtViewer() async {
+        guard let scene else { return }
+        let (eye, yaw) = await Self.viewerPose()
+        scene.position = eye
+        scene.orientation = simd_quatf(angle: yaw, axis: [0, 1, 0]) * simd_quatf(angle: .pi, axis: [1, 0, 0])
+    }
+
+    /// Where the viewer's head is and which way they face, in the immersive
+    /// space. Falls back to standing eye height, facing -z, without tracking
+    /// (such as in the simulator).
+    private static func viewerPose() async -> (SIMD3<Float>, Float) {
+        let fallback: (SIMD3<Float>, Float) = ([0, 1.6, 0], 0)
+        guard WorldTrackingProvider.isSupported else { return fallback }
+        let session = ARKitSession()
+        let world = WorldTrackingProvider()
+        do {
+            try await session.run([world])
+        } catch {
+            log.error("World tracking unavailable: \(error, privacy: .public)")
+            return fallback
+        }
+        defer { session.stop() }
+        // The first pose can take a moment to arrive.
+        for _ in 0..<20 {
+            if let device = world.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()), device.isTracked {
+                let m = device.originFromAnchorTransform
+                let forward = -SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z)
+                return (SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z), atan2(-forward.x, -forward.z))
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return fallback
     }
 
     private static func skybox(_ texture: TextureResource) -> Entity {
@@ -237,7 +288,11 @@ struct EnvironmentImmersiveView: View {
                             .lineLimit(1)
                     }
                     Spacer(minLength: 24)
-                    if model != nil {
+                    if scene != nil {
+                        panelButton("Recenter", systemImage: "arrow.counterclockwise") {
+                            Task { await placeSceneAtViewer() }
+                        }
+                    } else if model != nil {
                         panelButton("Reset", systemImage: "arrow.counterclockwise") { reset() }
                     }
                     panelButton("Exit", systemImage: "xmark") {
@@ -260,6 +315,10 @@ struct EnvironmentImmersiveView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.white.opacity(0.85))
                         .lineLimit(3)
+                } else if scene != nil {
+                    Text("Seen from where it was captured · Recenter after you move")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.75))
                 } else if model != nil {
                     Text("Drag to move · Pinch with both hands to resize or turn · Tap to interact")
                         .font(.system(size: 14, weight: .medium))

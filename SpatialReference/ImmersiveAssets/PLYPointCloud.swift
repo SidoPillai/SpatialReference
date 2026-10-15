@@ -501,24 +501,27 @@ extension PLYPointCloud {
     /// Whether the device shows only the `maxSplats` most visible splats.
     var exceedsSplatLimit: Bool { count > Self.maxSplats }
 
-    /// An entity showing the points, centered on the origin, with a collision
-    /// box so it can be dragged and pinched. On device the points render as
+    /// An entity showing the points. As an object it's centered on the origin,
+    /// with a collision box so it can be dragged and pinched. As a scene the
+    /// capture's camera stays at the origin, looking down -z, so placing the
+    /// entity at someone's eyes shows them the view it was captured from. On device the points render as
     /// Gaussian splats; the simulator has no splat renderer, so it gets small
     /// colored octahedra instead.
     @MainActor
-    func makeEntity() async throws -> Entity {
+    func makeEntity(asScene: Bool = false) async throws -> Entity {
         #if targetEnvironment(simulator)
         let points = try await makePointMesh()
         #else
         let points = try makeSplats()
         #endif
-        points.position = -center
+        if !asScene { points.position = -center }
         let content = Entity()
         content.addChild(points)
         if isGaussianSplat {
             // 3DGS captures use the COLMAP convention: y down, z forward.
             content.orientation = simd_quatf(angle: .pi, axis: [1, 0, 0])
         }
+        if asScene { return content }
         let box = Entity()
         box.components.set(CollisionComponent(shapes: [.generateBox(size: simd_max(extents, .init(repeating: 0.01)))]))
         content.addChild(box)

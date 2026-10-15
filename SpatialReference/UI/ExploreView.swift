@@ -237,8 +237,13 @@ struct ExploreView: View {
     @Environment(AppModel.self) private var appModel
 
     enum Section { case explore, exhibitions, environments, library, search, settings }
-    @State private var section = Section.explore
-    @State private var category = ExploreCategory.featured
+    // Kept on the app model so returning from a story lands on the tab
+    // (and category) it was opened from, not back on Explore.
+    private var section: Section { appModel.exploreSection }
+    private var category: ExploreCategory {
+        get { appModel.exploreCategory }
+        nonmutating set { appModel.exploreCategory = newValue }
+    }
 
     private var session: ArcGISOnlineSession { appModel.arcGISSession }
 
@@ -263,7 +268,7 @@ struct ExploreView: View {
         // On visionOS a TabView renders as a leading ornament that expands to
         // show tab names while the user looks at it and collapses when they
         // look away. The system drives this, as apps never receive gaze data.
-        TabView(selection: $section) {
+        TabView(selection: Bindable(appModel).exploreSection) {
             Tab("Explore", systemImage: "safari", value: Section.explore) {
                 sectionPage(.explore)
             }

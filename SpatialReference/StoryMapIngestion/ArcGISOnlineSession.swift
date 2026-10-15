@@ -128,8 +128,12 @@ final class ArcGISOnlineSession {
         )
     }
 
-    /// The signed-in user's StoryMaps, newest first — including private ones,
-    /// which the search API only returns because the request is authenticated.
+    /// The type keyword that marks a StoryMap as authored for mixed reality.
+    static let mixedRealityTypeKeyword = "mixed-reality"
+
+    /// The signed-in user's mixed-reality StoryMaps, newest first — including
+    /// private ones, which the search API only returns because the request is
+    /// authenticated. Items without the `mixed-reality` type keyword are skipped.
     func listMyStoryMaps() async throws -> [StoryMapItem] {
         guard case .signedIn(let username) = state else { throw SessionError.notSignedIn }
         let token = try await accessToken()
@@ -138,7 +142,7 @@ final class ArcGISOnlineSession {
             path: "sharing/rest/search",
             extraQueryItems: [
                 URLQueryItem(name: "f", value: "json"),
-                URLQueryItem(name: "q", value: "owner:\"\(username)\" AND type:\"StoryMap\""),
+                URLQueryItem(name: "q", value: "owner:\"\(username)\" AND type:\"StoryMap\" AND typekeywords:\"\(Self.mixedRealityTypeKeyword)\""),
                 URLQueryItem(name: "sortField", value: "modified"),
                 URLQueryItem(name: "sortOrder", value: "desc"),
                 URLQueryItem(name: "num", value: "100"),
@@ -146,7 +150,13 @@ final class ArcGISOnlineSession {
             token: token
         )
         let response = try JSONDecoder().decode(SearchResponse.self, from: data)
-        return response.results.map { result in
+        // The search index tokenizes keywords, so re-check for an exact match.
+        let mixedRealityResults = response.results.filter { result in
+            (result.typeKeywords ?? []).contains {
+                $0.caseInsensitiveCompare(Self.mixedRealityTypeKeyword) == .orderedSame
+            }
+        }
+        return mixedRealityResults.map { result in
             StoryMapItem(
                 id: result.id,
                 title: result.title,
@@ -205,6 +215,7 @@ final class ArcGISOnlineSession {
             let modified: Double?
             let access: String?
             let thumbnail: String?
+            let typeKeywords: [String]?
         }
         let results: [Result]
     }

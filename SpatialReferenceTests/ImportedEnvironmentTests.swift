@@ -123,7 +123,7 @@ struct ImportedEnvironmentTests {
 struct PLYPointCloudTests {
 
     /// A binary little-endian 3DGS file with `count` splats.
-    static func splatPLY(count: Int) -> Data {
+    static func splatPLY(count: Int, opacity: (Int) -> Float = { _ in 2 }) -> Data {
         let names = ["x", "y", "z", "nx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "opacity",
                      "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"]
         var data = Data("""
@@ -136,7 +136,7 @@ struct PLYPointCloudTests {
         """.utf8)
         for i in 0..<count {
             // Position i, color dc 1, opacity 2, scale -3, rotation identity (w first).
-            let values: [Float] = [Float(i), Float(i) * 2, -Float(i), 0, 0, 0, 1, 1, 1, 2, -3, -3, -3, 2, 0, 0, 0]
+            let values: [Float] = [Float(i), Float(i) * 2, -Float(i), 0, 0, 0, 1, 1, 1, opacity(i), -3, -3, -3, 2, 0, 0, 0]
             for v in values { withUnsafeBytes(of: v.bitPattern.littleEndian) { data.append(contentsOf: $0) } }
         }
         return data
@@ -217,6 +217,20 @@ struct PLYPointCloudTests {
         let entity = try await cloud.makeEntity()
         #expect(entity.children.contains { $0.components.has(CollisionComponent.self) })
         #expect(entity.children.contains { $0.position == -cloud.center })
+    }
+
+    @Test func keepsTheMostVisibleSplatsWhenOverTheLimit() throws {
+        // Splat i has opacity logit i and log scale -3: later ones matter more.
+        let cloud = try PLYPointCloud(data: Self.splatPLY(count: 10, opacity: { Float($0) }))
+        let reduced = cloud.keepingMostVisible(4)
+        #expect(reduced.count == 4)
+        #expect(reduced.opacities == [6, 7, 8, 9])
+        #expect(reduced.positions.count == 12 && reduced.colors.count == 12)
+        #expect(reduced.scales.count == 12 && reduced.rotations.count == 16)
+        #expect(Array(reduced.positions.prefix(3)) == [6, 12, -6])
+        // Placement still follows the full capture.
+        #expect(reduced.center == cloud.center)
+        #expect(cloud.keepingMostVisible(20).count == 10)
     }
 
     @Test func rejectsTruncatedAndInvalidFiles() {

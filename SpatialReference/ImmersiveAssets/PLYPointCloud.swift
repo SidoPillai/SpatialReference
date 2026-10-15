@@ -55,9 +55,14 @@ nonisolated struct PLYPointCloud: Sendable {
     private(set) var colors: [Float] = []
     private(set) var boundsMin = SIMD3<Float>(repeating: .infinity)
     private(set) var boundsMax = SIMD3<Float>(repeating: -.infinity)
+    /// Where most points are; see `percentileBounds`.
+    private(set) var coreMin = SIMD3<Float>.zero
+    private(set) var coreMax = SIMD3<Float>.zero
 
-    var center: SIMD3<Float> { (boundsMin + boundsMax) / 2 }
-    var extents: SIMD3<Float> { count > 0 ? boundsMax - boundsMin : .zero }
+    /// The middle of where most points are, ignoring stray outliers.
+    var center: SIMD3<Float> { (coreMin + coreMax) / 2 }
+    /// The size of where most points are, ignoring stray outliers.
+    var extents: SIMD3<Float> { coreMax - coreMin }
 
     // MARK: - Header
 
@@ -181,81 +186,234 @@ nonisolated struct PLYPointCloud: Sendable {
             .allSatisfy(names.contains)
 
         // Each vertex's values in property order, whatever the file format.
+        // Only the properties used below are read; a 3DGS file has dozens.
+        let columns = Columns(vertex.properties)
+        let n = vertex.count
+        let splat = isGaussianSplat
+        // Written through raw pointers: this loop runs a million times or
+        // more, and array bookkeeping dominates it in Debug builds.
         var row = [Float](repeating: 0, count: vertex.properties.count)
-        let column = Dictionary(uniqueKeysWithValues: names.enumerated().map { ($1, $0) })
-        reserve(vertex.count)
+        var positions = [Float](repeating: 0, count: n * 3)
+        var colors = [Float](repeating: 0, count: n * 3)
+        var scales = [Float](repeating: 0, count: splat ? n * 3 : 0)
+        var rotations = [Float](repeating: 0, count: splat ? n * 4 : 0)
+        var opacities = [Float](repeating: 0, count: splat ? n : 0)
+        var kept = 0
+        // Scalar math throughout: SIMD calls are slow in Debug builds.
+        var minX = Float.infinity, minY = Float.infinity, minZ = Float.infinity
+        var maxX = -Float.infinity, maxY = -Float.infinity, maxZ = -Float.infinity
 
-        try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
-            if header.format == .ascii {
-                var lines = AsciiLines(bytes, from: header.bodyOffset)
-                for element in header.elements[..<vertexIndex] {
-                    for _ in 0..<element.count { guard lines.next() != nil else { throw ParseError.truncated } }
-                }
-                for _ in 0..<vertex.count {
-                    guard let line = lines.next() else { throw ParseError.truncated }
-                    var i = 0
-                    for word in line.split(separator: UInt8(ascii: " "), omittingEmptySubsequences: true) where i < row.count {
-                        row[i] = Float(String(decoding: word, as: UTF8.self)) ?? 0
-                        i += 1
+        try row.withUnsafeMutableBufferPointer { r in
+        try positions.withUnsafeMutableBufferPointer { pos in
+        try colors.withUnsafeMutableBufferPointer { col in
+        try scales.withUnsafeMutableBufferPointer { sca in
+        try rotations.withUnsafeMutableBufferPointer { rot in
+        try opacities.withUnsafeMutableBufferPointer { opa in
+            func store() {
+                let x = r[columns.x], y = r[columns.y], z = r[columns.z]
+                guard x.isFinite, y.isFinite, z.isFinite else { return }
+                pos[kept * 3] = x
+                pos[kept * 3 + 1] = y
+                pos[kept * 3 + 2] = z
+                if x < minX { minX = x }
+                if y < minY { minY = y }
+                if z < minZ { minZ = z }
+                if x > maxX { maxX = x }
+                if y > maxY { maxY = y }
+                if z > maxZ { maxZ = z }
+                if splat, let dc = columns.dc, let o = columns.opacity, let sc = columns.scale, let q = columns.rotation {
+                    col[kept * 3] = r[dc.0]
+                    col[kept * 3 + 1] = r[dc.1]
+                    col[kept * 3 + 2] = r[dc.2]
+                    opa[kept] = r[o]
+                    sca[kept * 3] = r[sc.0]
+                    sca[kept * 3 + 1] = r[sc.1]
+                    sca[kept * 3 + 2] = r[sc.2]
+                    // 3DGS stores the real part first; RealityKit wants it last.
+                    let w = r[q.0], qx = r[q.1], qy = r[q.2], qz = r[q.3]
+                    let length = (w * w + qx * qx + qy * qy + qz * qz).squareRoot()
+                    let scale: Float = length > 0 ? 1 / length : 0
+                    rot[kept * 4] = qx * scale
+                    rot[kept * 4 + 1] = qy * scale
+                    rot[kept * 4 + 2] = qz * scale
+                    rot[kept * 4 + 3] = length > 0 ? w * scale : 1
+                } else {
+                    var rgb = SIMD3<Float>(repeating: 0.8)
+                    if let (cr, cg, cb) = columns.rgb {
+                        rgb = SIMD3(r[cr], r[cg], r[cb]) / columns.rgbMax
                     }
-                    guard i == row.count else { throw ParseError.truncated }
-                    append(row, column: column, types: vertex.properties)
+                    let dc = (simd_clamp(rgb, .zero, .one) - 0.5) / Self.shC0
+                    col[kept * 3] = dc.x
+                    col[kept * 3 + 1] = dc.y
+                    col[kept * 3 + 2] = dc.z
                 }
-            } else {
-                let bigEndian = header.format == .binaryBigEndian
-                var offset = header.bodyOffset
-                for element in header.elements[..<vertexIndex] {
-                    offset = try Self.skip(element, in: bytes, from: offset, bigEndian: bigEndian)
-                }
-                let stride = vertex.properties.reduce(0) { $0 + $1.type.size }
-                guard offset + stride * vertex.count <= bytes.count else { throw ParseError.truncated }
-                for _ in 0..<vertex.count {
-                    for (i, property) in vertex.properties.enumerated() {
-                        row[i] = Self.read(property.type, in: bytes, at: offset, bigEndian: bigEndian)
-                        offset += property.type.size
+                kept += 1
+            }
+
+            try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+                if header.format == .ascii {
+                    var lines = AsciiLines(bytes, from: header.bodyOffset)
+                    for element in header.elements[..<vertexIndex] {
+                        for _ in 0..<element.count { guard lines.next() != nil else { throw ParseError.truncated } }
                     }
-                    append(row, column: column, types: vertex.properties)
+                    for _ in 0..<n {
+                        guard let line = lines.next() else { throw ParseError.truncated }
+                        var i = 0
+                        for word in line.split(separator: UInt8(ascii: " "), omittingEmptySubsequences: true) where i < r.count {
+                            r[i] = Float(String(decoding: word, as: UTF8.self)) ?? 0
+                            i += 1
+                        }
+                        guard i == r.count else { throw ParseError.truncated }
+                        store()
+                    }
+                } else {
+                    let bigEndian = header.format == .binaryBigEndian
+                    var offset = header.bodyOffset
+                    for element in header.elements[..<vertexIndex] {
+                        offset = try Self.skip(element, in: bytes, from: offset, bigEndian: bigEndian)
+                    }
+                    let stride = vertex.properties.reduce(0) { $0 + $1.type.size }
+                    guard offset + stride * n <= bytes.count else { throw ParseError.truncated }
+                    var byteOffsets: [Int] = []
+                    var start = 0
+                    for property in vertex.properties {
+                        byteOffsets.append(start)
+                        start += property.type.size
+                    }
+                    let used = columns.used
+                    let fieldColumns = used
+                    let fieldOffsets = used.map { byteOffsets[$0] }
+                    let fieldTypes = used.map { vertex.properties[$0].type }
+                    // The common case: little-endian floats, read directly.
+                    let allFloats = !bigEndian && fieldTypes.allSatisfy { $0 == .float32 }
+                    for _ in 0..<n {
+                        for f in 0..<fieldColumns.count {
+                            r[fieldColumns[f]] = allFloats
+                                ? bytes.loadUnaligned(fromByteOffset: offset + fieldOffsets[f], as: Float.self)
+                                : Self.read(fieldTypes[f], in: bytes, at: offset + fieldOffsets[f], bigEndian: bigEndian)
+                        }
+                        offset += stride
+                        store()
+                    }
                 }
             }
         }
+        }
+        }
+        }
+        }
+        }
+
+        count = kept
+        boundsMin = SIMD3(minX, minY, minZ)
+        boundsMax = SIMD3(maxX, maxY, maxZ)
+        // Drop the room left by skipped non-finite points.
+        positions.removeLast(positions.count - kept * 3)
+        colors.removeLast(colors.count - kept * 3)
+        self.positions = positions
+        self.colors = colors
+        if splat {
+            scales.removeLast(scales.count - kept * 3)
+            rotations.removeLast(rotations.count - kept * 4)
+            opacities.removeLast(opacities.count - kept)
+            self.scales = scales
+            self.rotations = rotations
+            self.opacities = opacities
+        }
+        (coreMin, coreMax) = Self.percentileBounds(of: self.positions, count: kept)
         if !isGaussianSplat { fillPointSplats() }
     }
 
-    private mutating func reserve(_ n: Int) {
-        positions.reserveCapacity(n * 3)
-        scales.reserveCapacity(n * 3)
-        rotations.reserveCapacity(n * 4)
-        opacities.reserveCapacity(n)
-        colors.reserveCapacity(n * 3)
+    /// Where each property this reader uses sits in a vertex row.
+    private struct Columns {
+        let x, y, z: Int
+        var dc: (Int, Int, Int)?
+        var opacity: Int?
+        var scale: (Int, Int, Int)?
+        var rotation: (Int, Int, Int, Int)?
+        var rgb: (Int, Int, Int)?
+        /// Divides integer colors down to 0...1.
+        var rgbMax: Float = 1
+
+        init(_ properties: [Header.Property]) {
+            let names = properties.map(\.name)
+            func index(_ name: String) -> Int? { names.firstIndex(of: name) }
+            x = index("x")!
+            y = index("y")!
+            z = index("z")!
+            if let a = index("f_dc_0"), let b = index("f_dc_1"), let c = index("f_dc_2") { dc = (a, b, c) }
+            opacity = index("opacity")
+            if let a = index("scale_0"), let b = index("scale_1"), let c = index("scale_2") { scale = (a, b, c) }
+            if let a = index("rot_0"), let b = index("rot_1"), let c = index("rot_2"), let d = index("rot_3") { rotation = (a, b, c, d) }
+            if let r = index("red"), let g = index("green"), let b = index("blue") {
+                rgb = (r, g, b)
+                let type = properties[r].type
+                rgbMax = type.isInteger ? (type == .uint16 ? 65535 : 255) : 1
+            }
+        }
+
+        var used: [Int] {
+            var all = [x, y, z]
+            if let dc { all += [dc.0, dc.1, dc.2] }
+            if let opacity { all.append(opacity) }
+            if let scale { all += [scale.0, scale.1, scale.2] }
+            if let rotation { all += [rotation.0, rotation.1, rotation.2, rotation.3] }
+            if let rgb { all += [rgb.0, rgb.1, rgb.2] }
+            return all
+        }
     }
 
-    private mutating func append(_ row: [Float], column: [String: Int], types: [Header.Property]) {
-        func value(_ name: String) -> Float? { column[name].map { row[$0] } }
-
-        let p = SIMD3(row[column["x"]!], row[column["y"]!], row[column["z"]!])
-        guard p.x.isFinite, p.y.isFinite, p.z.isFinite else { return }
-        positions += [p.x, p.y, p.z]
-        boundsMin = pointwiseMin(boundsMin, p)
-        boundsMax = pointwiseMax(boundsMax, p)
-        count += 1
-
-        if isGaussianSplat {
-            colors += [value("f_dc_0")!, value("f_dc_1")!, value("f_dc_2")!]
-            opacities.append(value("opacity")!)
-            scales += [value("scale_0")!, value("scale_1")!, value("scale_2")!]
-            // 3DGS stores the real part first.
-            let q = simd_normalize(simd_quatf(ix: value("rot_1")!, iy: value("rot_2")!, iz: value("rot_3")!, r: value("rot_0")!))
-            rotations += [q.imag.x, q.imag.y, q.imag.z, q.real]
-        } else {
-            var rgb = SIMD3<Float>(repeating: 0.8)
-            if let r = column["red"], let g = column["green"], let b = column["blue"] {
-                let isInteger = types[r].type.isInteger
-                let maxValue: Float = types[r].type == .uint16 ? 65535 : 255
-                rgb = SIMD3(row[r], row[g], row[b]) / (isInteger ? maxValue : 1)
-            }
-            let dc = (simd_clamp(rgb, .zero, .one) - 0.5) / Self.shC0
-            colors += [dc.x, dc.y, dc.z]
+    /// The `limit` splats that contribute most to the image, by opacity times
+    /// volume, the usual measure for pruning a capture. Bounds stay those of
+    /// the full capture so it's placed the same either way.
+    func keepingMostVisible(_ limit: Int) -> PLYPointCloud {
+        guard isGaussianSplat, count > limit else { return self }
+        // log(sigmoid(opacity) · e^(s0+s1+s2)); scalar math for Debug builds.
+        var importance = [Float](repeating: 0, count: count)
+        for i in 0..<count {
+            let o = opacities[i]
+            importance[i] = -log1p(exp(-o)) + scales[i * 3] + scales[i * 3 + 1] + scales[i * 3 + 2]
         }
+        // Find the cutoff from a sample instead of sorting every splat.
+        let step = max(1, count / 200_000)
+        let sample = Swift.stride(from: 0, to: count, by: step).map { importance[$0] }.sorted(by: >)
+        let cutoff = sample[min(sample.count - 1, max(0, sample.count * limit / count - 1))]
+
+        var kept: [Int] = []
+        kept.reserveCapacity(limit)
+        for i in 0..<count where importance[i] >= cutoff && kept.count < limit { kept.append(i) }
+
+        func gather(_ values: [Float], _ width: Int) -> [Float] {
+            var out = [Float]()
+            out.reserveCapacity(kept.count * width)
+            for i in kept { for c in 0..<width { out.append(values[i * width + c]) } }
+            return out
+        }
+        var reduced = self
+        reduced.count = kept.count
+        reduced.positions = gather(positions, 3)
+        reduced.colors = gather(colors, 3)
+        reduced.scales = gather(scales, 3)
+        reduced.rotations = gather(rotations, 4)
+        reduced.opacities = gather(opacities, 1)
+        return reduced
+    }
+
+    /// The 1st to 99th percentile of each axis. Captures often have a few
+    /// stray splats far out in the background; fitting to the full bounds
+    /// would shrink the actual subject to a speck.
+    static func percentileBounds(of positions: [Float], count: Int) -> (SIMD3<Float>, SIMD3<Float>) {
+        guard count > 0 else { return (.zero, .zero) }
+        // A sample is plenty to place percentiles.
+        let step = max(1, count / 100_000)
+        var lower = SIMD3<Float>.zero, upper = SIMD3<Float>.zero
+        for axis in 0..<3 {
+            let values = Swift.stride(from: 0, to: count, by: step).map { positions[$0 * 3 + axis] }.sorted()
+            let last = Float(values.count - 1)
+            lower[axis] = values[Int((last * 0.01).rounded(.down))]
+            upper[axis] = values[Int((last * 0.99).rounded(.up))]
+        }
+        return (lower, upper)
     }
 
     /// Gives plain points a round, nearly opaque splat sized to the cloud's
@@ -336,6 +494,12 @@ nonisolated struct PLYPointCloud: Sendable {
 extension PLYPointCloud {
     /// Most points the simulator fallback draws; each becomes 6 vertices.
     static let maxMeshPoints = 150_000
+    /// Most splats visionOS renders in one resource; a larger buffer is
+    /// rejected as invalid.
+    static let maxSplats = 400_000
+
+    /// Whether the device shows only the `maxSplats` most visible splats.
+    var exceedsSplatLimit: Bool { count > Self.maxSplats }
 
     /// An entity showing the points, centered on the origin, with a collision
     /// box so it can be dragged and pinched. On device the points render as
@@ -364,6 +528,12 @@ extension PLYPointCloud {
     #if !targetEnvironment(simulator)
     @MainActor
     private func makeSplats() throws -> Entity {
+        let cloud = exceedsSplatLimit ? keepingMostVisible(Self.maxSplats) : self
+        return try cloud.makeSplatEntity()
+    }
+
+    @MainActor
+    private func makeSplatEntity() throws -> Entity {
         func descriptor(_ values: [Float], components: Int, format: MTLAttributeFormat) throws -> GaussianSplatResource.BufferDescriptor {
             let size = values.count * MemoryLayout<Float>.stride
             let buffer = try LowLevelBuffer(descriptor: .init(capacity: size))

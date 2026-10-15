@@ -5,6 +5,7 @@
 
 import CoreGraphics
 import Foundation
+import OSLog
 import RealityKit
 import SwiftUI
 
@@ -44,6 +45,8 @@ struct EnvironmentImmersiveView: View {
     @State private var model: InteractiveModel?
     @State private var isLoading = false
     @State private var loadError: String?
+    /// Set when RealityKit cuts back on a splat capture to stay within budget.
+    @State private var renderingNote: String?
 
     // Gesture start values, so each gesture applies relative to where it began.
     @State private var dragStart: SIMD3<Float>?
@@ -55,9 +58,19 @@ struct EnvironmentImmersiveView: View {
     /// A model's largest dimension when it first appears, in metres.
     private static let modelSize: Float = 0.8
 
+    private static let log = Logger(subsystem: "com.esri.storymaps.SpatialReference", category: "Environments")
+
     var body: some View {
         RealityView { content, attachments in
             content.add(root)
+            #if !targetEnvironment(simulator)
+            _ = content.subscribe(to: GaussianSplatEvents.RenderingChanged.self) { event in
+                Self.log.info("Splat rendering \(String(describing: event.renderingStatus)), limited: \(event.isRenderingLimited)")
+                if event.isRenderingLimited, renderingNote == nil {
+                    renderingNote = "visionOS is showing this capture at reduced quality to keep up."
+                }
+            }
+            #endif
             if let panel = attachments.entity(for: "panel") {
                 panel.position = [0, 0.62, -0.95]
                 // Tip it back to face someone looking down at it.
@@ -80,6 +93,7 @@ struct EnvironmentImmersiveView: View {
         root.children.removeAll()
         model = nil
         loadError = nil
+        renderingNote = nil
         guard let env = appModel.activeEnvironment else { return }
         isLoading = true
         defer { isLoading = false }
@@ -97,7 +111,16 @@ struct EnvironmentImmersiveView: View {
                 self.model = model
                 reset(animated: false)
             case .pointCloud(let url):
+                let start = ContinuousClock.now
                 let cloud = try await Self.readPointCloud(url)
+                Self.log.info("Parsed \(cloud.count) points in \(ContinuousClock.now - start); core size \(cloud.extents)")
+                #if !targetEnvironment(simulator)
+                if cloud.isGaussianSplat, cloud.exceedsSplatLimit {
+                    let shown = PLYPointCloud.maxSplats.formatted(.number.notation(.compactName))
+                    let total = cloud.count.formatted(.number.notation(.compactName).precision(.significantDigits(1...3)))
+                    renderingNote = "Showing the \(shown) most visible of \(total) splats, the most visionOS renders at once."
+                }
+                #endif
                 let extents = cloud.extents
                 let model = InteractiveModel(
                     try await cloud.makeEntity(), isRealityFile: false,
@@ -110,6 +133,7 @@ struct EnvironmentImmersiveView: View {
         } catch is CancellationError {
             return
         } catch {
+            Self.log.error("Couldn’t load \(env.title, privacy: .public): \(error, privacy: .public)")
             loadError = error.localizedDescription
         }
     }
@@ -228,6 +252,11 @@ struct EnvironmentImmersiveView: View {
                         .foregroundStyle(.white.opacity(0.75))
                 } else if let loadError {
                     Label(loadError, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(3)
+                } else if let renderingNote {
+                    Label(renderingNote, systemImage: "exclamationmark.triangle")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.white.opacity(0.85))
                         .lineLimit(3)

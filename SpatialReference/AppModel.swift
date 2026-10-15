@@ -33,6 +33,10 @@ class AppModel {
     var screen = Screen.welcome
     var story: Story?
     var currentChapterIndex = 0
+    /// The Explore window's selected tab and category, kept here so they
+    /// survive opening and closing a story.
+    var exploreSection = ExploreView.Section.explore
+    var exploreCategory = ExploreCategory.featured
 
     // MARK: - Library (the signed-in user's StoryMaps)
 

@@ -219,15 +219,6 @@ struct PLYPointCloudTests {
         #expect(entity.children.contains { $0.position == -cloud.center })
     }
 
-    @MainActor
-    @Test func scenesKeepTheCaptureCameraAtTheOrigin() async throws {
-        let cloud = try PLYPointCloud(data: Self.splatPLY(count: 3))
-        let scene = try await cloud.makeEntity(asScene: true)
-        #expect(scene.children.count == 1)
-        #expect(scene.children[0].position == .zero)
-        #expect(!scene.children.contains { $0.components.has(CollisionComponent.self) })
-    }
-
     @Test func keepsTheMostVisibleSplatsWhenOverTheLimit() throws {
         // Splat i has opacity logit i and log scale -3: later ones matter more.
         let cloud = try PLYPointCloud(data: Self.splatPLY(count: 10, opacity: { Float($0) }))

@@ -34,60 +34,84 @@ struct ActiveEnvironment {
 }
 
 /// The environment immersive space. A panorama is mapped onto the inside of
-/// a huge sphere around the viewer (progressive immersion); a model stands
-/// in the room (mixed immersion) and can be dragged to move it, pinched with
-/// both hands to resize or turn it, and tapped to run any behaviors authored
-/// into a `.reality` file. A small glass panel names it and leads out.
+/// a huge sphere around the viewer (progressive immersion); a model, splat
+/// capture or point cloud stands in the room (mixed immersion) and can be
+/// dragged to move it, pinched with both hands to resize or turn it, and
+/// tapped to run any behaviors authored into a `.reality` file.
+///
+/// A floating toolbar below eye level leads out, steps to the previous or
+/// next environment, resets, turns, adjusts exposure, flips upside down, sets
+/// the background music, and shows details.
 struct EnvironmentImmersiveView: View {
 
     @Environment(AppModel.self) private var appModel
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    @AppStorage(SettingsKey.backgroundMusic) private var backgroundMusic = true
+    @AppStorage(SettingsKey.backgroundMusicTrack) private var backgroundMusicTrack = MusicTrack.defaultID
 
     @State private var root = Entity()
+    /// Holds the toolbar; placed in front of the viewer when content loads.
+    @State private var toolbarAnchor = Entity()
     @State private var model: InteractiveModel?
-    /// A Gaussian splat capture, shown from where it was captured.
-    @State private var scene: Entity?
+    /// The panorama sphere, turned and flipped in place.
+    @State private var skybox: ModelEntity?
     @State private var isLoading = false
     @State private var loadError: String?
-    /// Set when RealityKit cuts back on a splat capture to stay within budget.
+    /// Set when a capture shows fewer splats than it has.
     @State private var renderingNote: String?
+    /// Splats kept / in the file, for the info card.
+    @State private var splatCounts: (shown: Int, total: Int)?
+
+    @State private var openCard: ToolbarCard?
+    /// Exposure in stops: 0 is as captured, +1 twice as bright.
+    @State private var exposure: Float = 0
+    @State private var isFlipped = false
+    /// Turns applied to a panorama, in radians.
+    @State private var skyboxYaw: Float = 0
+    #if !targetEnvironment(simulator)
+    @State private var splatExposure: PLYPointCloud.SplatExposure?
+    #endif
+    /// Flat lighting a model is lit by while its exposure is changed.
+    @State private var neutralLight: EnvironmentResource?
 
     // Gesture start values, so each gesture applies relative to where it began.
     @State private var dragStart: SIMD3<Float>?
     @State private var scaleStart: Float?
     @State private var rotationStart: simd_quatf?
 
+    enum ToolbarCard { case exposure, music, info }
+
     /// Where a model first appears: centered at chest height, 1.4 m ahead.
     private static let modelHome: SIMD3<Float> = [0, 1.15, -1.4]
     /// A model's largest dimension when it first appears, in metres.
     private static let modelSize: Float = 0.8
+    /// A splat renderer budget: above roughly this many splats, visionOS
+    /// reports rendering as limited and draws nothing.
+    private static let splatBudget = 200_000
+    private static let exposureRange: ClosedRange<Float> = -2...2
 
     private static let log = Logger(subsystem: "com.esri.storymaps.SpatialReference", category: "Environments")
 
     var body: some View {
         RealityView { content, attachments in
             content.add(root)
-            #if !targetEnvironment(simulator)
-            _ = content.subscribe(to: GaussianSplatEvents.RenderingChanged.self) { event in
-                Self.log.info("Splat rendering \(String(describing: event.renderingStatus)), limited: \(event.isRenderingLimited)")
-                if event.isRenderingLimited, renderingNote == nil {
-                    renderingNote = "visionOS is showing this capture at reduced quality to keep up."
-                }
-            }
-            #endif
-            if let panel = attachments.entity(for: "panel") {
-                panel.position = [0, 0.62, -0.95]
+            content.add(toolbarAnchor)
+            toolbarAnchor.position = [0, 0.8, -0.85]
+            if let toolbar = attachments.entity(for: "toolbar") {
                 // Tip it back to face someone looking down at it.
-                panel.orientation = simd_quatf(angle: -25 * .pi / 180, axis: [1, 0, 0])
-                content.add(panel)
+                toolbar.orientation = simd_quatf(angle: -20 * .pi / 180, axis: [1, 0, 0])
+                toolbarAnchor.addChild(toolbar)
             }
         } attachments: {
-            Attachment(id: "panel") { panel }
+            Attachment(id: "toolbar") { toolbar }
         }
         .gesture(SpatialTapGesture().targetedToAnyEntity().onEnded { model?.tap($0.entity) })
         .gesture(drag.simultaneously(with: magnify).simultaneously(with: rotate))
         .task(id: appModel.activeEnvironmentID) {
             await load()
+        }
+        .task {
+            await placeToolbarAtViewer()
         }
     }
 
@@ -96,55 +120,46 @@ struct EnvironmentImmersiveView: View {
     private func load() async {
         root.children.removeAll()
         model = nil
-        scene = nil
+        skybox = nil
         loadError = nil
         renderingNote = nil
+        splatCounts = nil
+        isFlipped = false
+        skyboxYaw = 0
+        #if !targetEnvironment(simulator)
+        splatExposure = nil
+        #endif
         guard let env = appModel.activeEnvironment else { return }
         isLoading = true
         defer { isLoading = false }
         do {
             switch env.content {
             case .bundledPanorama(let name):
-                root.addChild(Self.skybox(try await Panorama.texture(named: name)))
+                showSkybox(try await Panorama.texture(named: name))
             case .panorama(let url):
-                root.addChild(Self.skybox(try await TextureResource(contentsOf: url)))
+                showSkybox(try await TextureResource(contentsOf: url))
             case .model(let url, let isRealityFile):
                 let entity = try await Entity(contentsOf: url)
                 Self.addGroundingShadows(to: entity)
-                let model = InteractiveModel(entity, isRealityFile: isRealityFile)
-                root.addChild(model.pivot)
-                self.model = model
-                reset(animated: false)
+                show(InteractiveModel(entity, isRealityFile: isRealityFile))
             case .pointCloud(let url):
                 let start = ContinuousClock.now
                 let cloud = try await Self.readPointCloud(url)
                 Self.log.info("Parsed \(cloud.count) points in \(ContinuousClock.now - start); core size \(cloud.extents)")
+                let extents = cloud.extents
+                let entity = try await cloud.makeEntity(splatLimit: Self.splatBudget)
+                show(InteractiveModel(entity, isRealityFile: false, bounds: BoundingBox(min: -extents / 2, max: extents / 2)))
                 #if !targetEnvironment(simulator)
-                if cloud.isGaussianSplat, cloud.exceedsSplatLimit {
-                    let shown = PLYPointCloud.maxSplats.formatted(.number.notation(.compactName))
+                splatExposure = PLYPointCloud.SplatExposure(in: entity)
+                splatCounts = (min(cloud.count, Self.splatBudget), cloud.count)
+                if cloud.count > Self.splatBudget {
+                    let shown = Self.splatBudget.formatted(.number.notation(.compactName))
                     let total = cloud.count.formatted(.number.notation(.compactName).precision(.significantDigits(1...3)))
-                    renderingNote = "Showing the \(shown) most visible of \(total) splats, the most visionOS renders at once."
+                    renderingNote = "Showing the \(shown) most visible of \(total) splats, as many as visionOS draws at once."
                 }
                 #endif
-                if cloud.isGaussianSplat {
-                    // Splats are views, often from a single photo: they only
-                    // look right from the capture's camera, so put that at the
-                    // viewer's eyes, life size, rather than shrink it onto a table.
-                    let scene = try await cloud.makeEntity(asScene: true)
-                    root.addChild(scene)
-                    self.scene = scene
-                    await placeSceneAtViewer()
-                    return
-                }
-                let extents = cloud.extents
-                let model = InteractiveModel(
-                    try await cloud.makeEntity(), isRealityFile: false,
-                    bounds: BoundingBox(min: -extents / 2, max: extents / 2)
-                )
-                root.addChild(model.pivot)
-                self.model = model
-                reset(animated: false)
             }
+            await applyExposure()
         } catch is CancellationError {
             return
         } catch {
@@ -153,57 +168,27 @@ struct EnvironmentImmersiveView: View {
         }
     }
 
+    private func show(_ model: InteractiveModel) {
+        root.addChild(model.pivot)
+        self.model = model
+        reset(animated: false)
+    }
+
+    private func showSkybox(_ texture: TextureResource) {
+        var material = UnlitMaterial()
+        material.color = .init(texture: .init(texture))
+        let sphere = ModelEntity(mesh: .generateSphere(radius: 1000), materials: [material])
+        // Flip the sphere inside out so the panorama faces the viewer.
+        sphere.scale = [-1, 1, 1]
+        root.addChild(sphere)
+        skybox = sphere
+        orientSkybox(animated: false)
+    }
+
     /// Parses off the main thread; splat captures run to hundreds of MB.
     @concurrent
     private nonisolated static func readPointCloud(_ url: URL) async throws -> PLYPointCloud {
         try PLYPointCloud(contentsOf: url)
-    }
-
-    /// Puts the scene's camera at the viewer's eyes, facing where they face
-    /// (level, ignoring head tilt).
-    private func placeSceneAtViewer() async {
-        guard let scene else { return }
-        let (eye, yaw) = await Self.viewerPose()
-        scene.position = eye
-        scene.orientation = simd_quatf(angle: yaw, axis: [0, 1, 0]) * simd_quatf(angle: .pi, axis: [1, 0, 0])
-    }
-
-    /// Where the viewer's head is and which way they face, in the immersive
-    /// space. Falls back to standing eye height, facing -z, without tracking
-    /// (such as in the simulator).
-    private static func viewerPose() async -> (SIMD3<Float>, Float) {
-        let fallback: (SIMD3<Float>, Float) = ([0, 1.6, 0], 0)
-        guard WorldTrackingProvider.isSupported else { return fallback }
-        let session = ARKitSession()
-        let world = WorldTrackingProvider()
-        do {
-            try await session.run([world])
-        } catch {
-            log.error("World tracking unavailable: \(error, privacy: .public)")
-            return fallback
-        }
-        defer { session.stop() }
-        // The first pose can take a moment to arrive.
-        for _ in 0..<20 {
-            if let device = world.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()), device.isTracked {
-                let m = device.originFromAnchorTransform
-                let forward = -SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z)
-                return (SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z), atan2(-forward.x, -forward.z))
-            }
-            try? await Task.sleep(for: .milliseconds(50))
-        }
-        return fallback
-    }
-
-    private static func skybox(_ texture: TextureResource) -> Entity {
-        var material = UnlitMaterial()
-        material.color = .init(texture: .init(texture))
-        let sphere = ModelEntity(mesh: .generateSphere(radius: 1000), materials: [material])
-        // Flip the sphere inside out so the panorama faces the viewer,
-        // then turn it so the image's center column sits straight ahead.
-        sphere.scale = [-1, 1, 1]
-        sphere.orientation = simd_quatf(angle: Panorama.forwardYaw, axis: [0, 1, 0])
-        return sphere
     }
 
     /// Grounds a model in the room with soft contact shadows.
@@ -214,7 +199,41 @@ struct EnvironmentImmersiveView: View {
         for child in entity.children { addGroundingShadows(to: child) }
     }
 
-    // MARK: - Model handling
+    /// Puts the toolbar 0.75 m in front of the viewer, a little below their
+    /// eyes, whether they sit or stand.
+    private func placeToolbarAtViewer() async {
+        guard let (eye, yaw) = await Self.viewerPose() else { return }
+        let facing = simd_quatf(angle: yaw, axis: [0, 1, 0])
+        toolbarAnchor.position = SIMD3(eye.x, eye.y - 0.4, eye.z) + facing.act([0, 0, -0.75])
+        toolbarAnchor.orientation = facing
+    }
+
+    /// Where the viewer's head is and which way they face, or nil without
+    /// world tracking (such as in the simulator).
+    private static func viewerPose() async -> (SIMD3<Float>, Float)? {
+        guard WorldTrackingProvider.isSupported else { return nil }
+        let session = ARKitSession()
+        let world = WorldTrackingProvider()
+        do {
+            try await session.run([world])
+        } catch {
+            log.error("World tracking unavailable: \(error, privacy: .public)")
+            return nil
+        }
+        defer { session.stop() }
+        // The provider takes a moment to start, and the first pose after that.
+        for _ in 0..<40 {
+            if world.state == .running, let device = world.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()), device.isTracked {
+                let m = device.originFromAnchorTransform
+                let forward = -SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z)
+                return (SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z), atan2(-forward.x, -forward.z))
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return nil
+    }
+
+    // MARK: - Toolbar actions
 
     /// The model's starting scale: its largest side at `modelSize`.
     private var fittedScale: Float {
@@ -223,14 +242,119 @@ struct EnvironmentImmersiveView: View {
     }
 
     private func reset(animated: Bool = true) {
-        guard let pivot = model?.pivot else { return }
+        isFlipped = false
+        skyboxYaw = 0
+        orientSkybox(animated: animated)
+        guard let model else { return }
         let home = Transform(scale: .init(repeating: fittedScale), rotation: simd_quatf(angle: 0, axis: [0, 1, 0]), translation: Self.modelHome)
-        if animated {
-            pivot.move(to: home, relativeTo: root, duration: 0.4, timingFunction: .easeInOut)
+        move(model.pivot, to: home, animated: animated)
+        applyFlip(animated: animated)
+    }
+
+    /// Turns the content an eighth of a turn to the right.
+    private func turn() {
+        let step = -Float.pi / 4
+        if let model {
+            var target = model.pivot.transform
+            target.rotation = simd_quatf(angle: step, axis: [0, 1, 0]) * target.rotation
+            move(model.pivot, to: target, animated: true)
         } else {
-            pivot.transform = home
+            skyboxYaw += step
+            orientSkybox(animated: true)
         }
     }
+
+    private func toggleFlip() {
+        isFlipped.toggle()
+        if model != nil {
+            applyFlip(animated: true)
+        } else {
+            orientSkybox(animated: true)
+        }
+    }
+
+    /// Flips a model upside down about its own center, inside the pivot so
+    /// the drag and pinch gestures still apply as before.
+    private func applyFlip(animated: Bool) {
+        guard let content = model?.pivot.children.first else { return }
+        var target = content.transform
+        target.rotation = isFlipped ? simd_quatf(angle: .pi, axis: [0, 0, 1]) : simd_quatf(angle: 0, axis: [0, 0, 1])
+        move(content, to: target, animated: animated)
+    }
+
+    private func orientSkybox(animated: Bool) {
+        guard let skybox else { return }
+        // RealityKit puts the image's center column behind the viewer, so a
+        // half turn (`forwardYaw`) brings it to straight ahead.
+        var rotation = simd_quatf(angle: Panorama.forwardYaw + skyboxYaw, axis: [0, 1, 0])
+        if isFlipped { rotation = simd_quatf(angle: .pi, axis: [0, 0, 1]) * rotation }
+        var target = skybox.transform
+        target.rotation = rotation
+        move(skybox, to: target, animated: animated)
+    }
+
+    private func move(_ entity: Entity, to transform: Transform, animated: Bool) {
+        if animated {
+            entity.move(to: transform, relativeTo: entity.parent, duration: 0.4, timingFunction: .easeInOut)
+        } else {
+            entity.transform = transform
+        }
+    }
+
+    /// Brightens or darkens whatever is showing by `exposure` stops.
+    private func applyExposure() async {
+        let gain = pow(2, exposure)
+        if let skybox, var material = skybox.model?.materials.first as? UnlitMaterial {
+            material.color.tint = UIColor(white: CGFloat(gain), alpha: 1)
+            skybox.model?.materials = [material]
+        }
+        #if !targetEnvironment(simulator)
+        if let splatExposure {
+            splatExposure.apply(stops: exposure)
+            return
+        }
+        #endif
+        guard let pivot = model?.pivot else { return }
+        if exposure == 0 {
+            // Back to the room's own lighting.
+            pivot.components.remove(ImageBasedLightComponent.self)
+            Self.setLightReceiver(nil, on: pivot)
+            return
+        }
+        guard let light = await neutralLightResource() else { return }
+        pivot.components.set(ImageBasedLightComponent(source: .single(light), intensityExponent: exposure))
+        Self.setLightReceiver(pivot, on: pivot)
+    }
+
+    private static func setLightReceiver(_ light: Entity?, on entity: Entity) {
+        if entity.components.has(ModelComponent.self) {
+            if let light {
+                entity.components.set(ImageBasedLightReceiverComponent(imageBasedLight: light))
+            } else {
+                entity.components.remove(ImageBasedLightReceiverComponent.self)
+            }
+        }
+        for child in entity.children { setLightReceiver(light, on: child) }
+    }
+
+    /// Soft light from a pale sky over a darker floor, for lighting a model
+    /// at a chosen exposure.
+    private func neutralLightResource() async -> EnvironmentResource? {
+        if let neutralLight { return neutralLight }
+        let width = 64, height = 32
+        guard let ctx = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        let colors = [CGColor(gray: 0.85, alpha: 1), CGColor(gray: 0.35, alpha: 1)] as CFArray
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
+            ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: height), end: .zero, options: [])
+        }
+        guard let image = ctx.makeImage() else { return nil }
+        neutralLight = try? await EnvironmentResource(equirectangular: image)
+        return neutralLight
+    }
+
+    // MARK: - Gestures
 
     private var drag: some Gesture {
         DragGesture()
@@ -271,79 +395,190 @@ struct EnvironmentImmersiveView: View {
             .onEnded { _ in rotationStart = nil }
     }
 
-    // MARK: - Panel
+    // MARK: - Toolbar
 
-    @ViewBuilder
-    private var panel: some View {
-        if let env = appModel.activeEnvironment {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(env.title)
-                            .font(.system(size: 20, weight: .bold))
-                            .lineLimit(1)
-                        Text(env.subtitle)
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.7))
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 24)
-                    if scene != nil {
-                        panelButton("Recenter", systemImage: "arrow.counterclockwise") {
-                            Task { await placeSceneAtViewer() }
-                        }
-                    } else if model != nil {
-                        panelButton("Reset", systemImage: "arrow.counterclockwise") { reset() }
-                    }
-                    panelButton("Exit", systemImage: "xmark") {
-                        Task { await appModel.dismissOpenImmersiveSpace(using: dismissImmersiveSpace) }
-                    }
-                    .disabled(appModel.isImmersiveSpaceInTransition)
-                    .accessibilityLabel("Exit \(env.title)")
-                }
-                if isLoading {
-                    Label("Loading…", systemImage: "hourglass")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.75))
-                } else if let loadError {
-                    Label(loadError, systemImage: "exclamationmark.triangle")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .lineLimit(3)
-                } else if let renderingNote {
-                    Label(renderingNote, systemImage: "exclamationmark.triangle")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .lineLimit(3)
-                } else if scene != nil {
-                    Text("Seen from where it was captured · Recenter after you move")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.75))
-                } else if model != nil {
-                    Text("Drag to move · Pinch with both hands to resize or turn · Tap to interact")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.75))
-                }
+    private var toolbar: some View {
+        VStack(spacing: 10) {
+            if let openCard {
+                card(openCard)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
             }
-            .padding(.leading, 26)
-            .padding(.trailing, 14)
-            .padding(.vertical, 14)
-            .frame(width: 520)
-            .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 32))
+            if let status {
+                Label(status.text, systemImage: status.symbol)
+                    .font(.system(size: 14, weight: .medium))
+                    .lineLimit(2)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .glassBackgroundEffect(in: Capsule())
+            }
+            HStack(spacing: 4) {
+                toolButton("Close", systemImage: "xmark") {
+                    Task { await appModel.dismissOpenImmersiveSpace(using: dismissImmersiveSpace) }
+                }
+                .disabled(appModel.isImmersiveSpaceInTransition)
+                divider
+                toolButton("Previous", systemImage: "chevron.left") { appModel.showAdjacentEnvironment(-1) }
+                    .disabled(appModel.enterableEnvironmentIDs.count < 2)
+                toolButton("Next", systemImage: "chevron.right") { appModel.showAdjacentEnvironment(1) }
+                    .disabled(appModel.enterableEnvironmentIDs.count < 2)
+                divider
+                toolButton("Reset", systemImage: "arrow.counterclockwise") { reset() }
+                toolButton("Turn", systemImage: "rotate.right") { turn() }
+                toolButton("Flip upside down", systemImage: "arrow.up.and.down", isOn: isFlipped) { toggleFlip() }
+                divider
+                toolButton("Exposure", systemImage: "sun.max", isOn: openCard == .exposure) { toggle(.exposure) }
+                toolButton("Music", systemImage: "music.note", isOn: openCard == .music) { toggle(.music) }
+                toolButton("Info", systemImage: "info.circle", isOn: openCard == .info) { toggle(.info) }
+            }
+            .padding(6)
+            .glassBackgroundEffect(in: Capsule())
         }
+        .frame(width: 600, alignment: .bottom)
+        .animation(.easeInOut(duration: 0.2), value: openCard)
     }
 
-    private func panelButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    private var status: (text: String, symbol: String)? {
+        if isLoading { return ("Loading…", "hourglass") }
+        if let loadError { return (loadError, "exclamationmark.triangle") }
+        return nil
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(.white.opacity(0.2))
+            .frame(width: 1, height: 24)
+            .padding(.horizontal, 4)
+    }
+
+    private func toggle(_ card: ToolbarCard) {
+        openCard = openCard == card ? nil : card
+    }
+
+    private func toolButton(_ title: String, systemImage: String, isOn: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 16, weight: .semibold))
-                .padding(.horizontal, 18)
-                .frame(height: 44)
-                .background(.white.opacity(0.12), in: Capsule())
-                .contentShape(Capsule())
+            Image(systemName: systemImage)
+                .font(.system(size: 19, weight: .semibold))
+                .frame(width: 48, height: 48)
+                .background(isOn ? AnyShapeStyle(.white.opacity(0.25)) : AnyShapeStyle(.clear), in: Circle())
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .hoverEffect()
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private func card(_ card: ToolbarCard) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            switch card {
+            case .exposure: exposureCard
+            case .music: musicCard
+            case .info: infoCard
+            }
+        }
+        .padding(22)
+        .frame(width: 420, alignment: .leading)
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 28))
+    }
+
+    private var exposureCard: some View {
+        Group {
+            HStack {
+                Text("Exposure").font(.headline)
+                Spacer()
+                Text(exposure, format: .number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))
+                    .font(.system(size: 15, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Button("Reset") { exposure = 0 }
+                    .disabled(exposure == 0)
+            }
+            Slider(value: $exposure, in: Self.exposureRange, step: 0.1) {
+                Text("Exposure")
+            } minimumValueLabel: {
+                Image(systemName: "sun.min")
+            } maximumValueLabel: {
+                Image(systemName: "sun.max.fill")
+            }
+            .onChange(of: exposure) {
+                Task { await applyExposure() }
+            }
+        }
+    }
+
+    private var musicCard: some View {
+        Group {
+            Toggle("Background Music", isOn: $backgroundMusic)
+                .font(.headline)
+                .onChange(of: backgroundMusic) { appModel.backgroundMusic.refresh() }
+            VStack(spacing: 2) {
+                ForEach(MusicTrack.catalog) { track in
+                    Button {
+                        backgroundMusicTrack = track.id
+                        backgroundMusic = true
+                        appModel.backgroundMusic.refresh()
+                    } label: {
+                        HStack {
+                            Image(systemName: "music.note")
+                                .foregroundStyle(.secondary)
+                            Text(track.title)
+                            Spacer()
+                            if backgroundMusic, track.id == backgroundMusicTrack {
+                                Image(systemName: "speaker.wave.2.fill")
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 40)
+                        .contentShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var infoCard: some View {
+        if let env = appModel.activeEnvironment {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(env.title).font(.title3.bold()).lineLimit(2)
+                Text(env.subtitle).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(infoRows, id: \.0) { row in
+                    LabeledContent(row.0, value: row.1)
+                }
+            }
+            .font(.system(size: 15))
+            if let renderingNote {
+                Label(renderingNote, systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+            Text(model != nil
+                 ? "Drag to move · Pinch with both hands to resize or turn · Tap to interact"
+                 : "Turn the Digital Crown to change how much of the room it covers.")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var infoRows: [(String, String)] {
+        var rows: [(String, String)] = []
+        if let splatCounts {
+            rows.append(("Splats shown", "\(splatCounts.shown.formatted()) of \(splatCounts.total.formatted())"))
+        }
+        if let model {
+            let size = model.extent * model.pivot.scale.x
+            rows.append(("Size", Measurement(value: Double(size), unit: UnitLength.meters).formatted(.measurement(width: .abbreviated, usage: .asProvided, numberFormatStyle: .number.precision(.fractionLength(2))))))
+        }
+        if exposure != 0 {
+            rows.append(("Exposure", exposure.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always()))))
+        }
+        if isFlipped { rows.append(("Orientation", "Upside down")) }
+        return rows
     }
 }
 

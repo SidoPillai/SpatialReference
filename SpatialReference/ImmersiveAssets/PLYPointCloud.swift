@@ -382,7 +382,17 @@ nonisolated struct PLYPointCloud: Sendable {
         var kept: [Int] = []
         kept.reserveCapacity(limit)
         for i in 0..<count where importance[i] >= cutoff && kept.count < limit { kept.append(i) }
+        return keeping(kept)
+    }
 
+    /// Every nth splat, down to `limit`: keeps fine detail that ranking by
+    /// size drops, at the cost of thinning big soft splats too.
+    func keepingEvenly(_ limit: Int) -> PLYPointCloud {
+        guard isGaussianSplat, count > limit else { return self }
+        return keeping((0..<limit).map { $0 * count / limit })
+    }
+
+    private func keeping(_ kept: [Int]) -> PLYPointCloud {
         func gather(_ values: [Float], _ width: Int) -> [Float] {
             var out = [Float]()
             out.reserveCapacity(kept.count * width)
@@ -498,30 +508,25 @@ extension PLYPointCloud {
     /// rejected as invalid.
     static let maxSplats = 400_000
 
-    /// Whether the device shows only the `maxSplats` most visible splats.
-    var exceedsSplatLimit: Bool { count > Self.maxSplats }
-
-    /// An entity showing the points. As an object it's centered on the origin,
-    /// with a collision box so it can be dragged and pinched. As a scene the
-    /// capture's camera stays at the origin, looking down -z, so placing the
-    /// entity at someone's eyes shows them the view it was captured from. On device the points render as
+    /// An entity showing the points, centered on the origin, with a collision
+    /// box so it can be dragged and pinched. On device the points render as
     /// Gaussian splats; the simulator has no splat renderer, so it gets small
     /// colored octahedra instead.
     @MainActor
-    func makeEntity(asScene: Bool = false) async throws -> Entity {
+    /// On device, at most `splatLimit` of the most visible splats are shown.
+    func makeEntity(splatLimit: Int = maxSplats) async throws -> Entity {
         #if targetEnvironment(simulator)
         let points = try await makePointMesh()
         #else
-        let points = try makeSplats()
+        let points = try makeSplats(limit: min(splatLimit, Self.maxSplats))
         #endif
-        if !asScene { points.position = -center }
+        points.position = -center
         let content = Entity()
         content.addChild(points)
         if isGaussianSplat {
             // 3DGS captures use the COLMAP convention: y down, z forward.
             content.orientation = simd_quatf(angle: .pi, axis: [1, 0, 0])
         }
-        if asScene { return content }
         let box = Entity()
         box.components.set(CollisionComponent(shapes: [.generateBox(size: simd_max(extents, .init(repeating: 0.01)))]))
         content.addChild(box)
@@ -529,9 +534,51 @@ extension PLYPointCloud {
     }
 
     #if !targetEnvironment(simulator)
+    /// Brightens or darkens the splats under an entity by rewriting their
+    /// colors in place, so a slider can drive it live.
     @MainActor
-    private func makeSplats() throws -> Entity {
-        let cloud = exceedsSplatLimit ? keepingMostVisible(Self.maxSplats) : self
+    final class SplatExposure {
+        private let buffer: LowLevelBuffer
+        /// The colors as loaded, as zeroth-order spherical harmonics.
+        private let base: [Float]
+
+        init?(in entity: Entity) {
+            guard let splats = Self.splatEntity(in: entity),
+                  let resource = splats.components[GaussianSplatComponent.self]?.splatResource.bufferResource else { return nil }
+            buffer = resource.sphericalHarmonics.buffer
+            let count = resource.count * 3
+            var base = [Float](repeating: 0, count: count)
+            buffer.withUnsafeBytes { bytes in
+                base.withUnsafeMutableBytes { $0.copyMemory(from: UnsafeRawBufferPointer(rebasing: bytes[..<(count * 4)])) }
+            }
+            self.base = base
+        }
+
+        /// Scales every color by 2^stops, as a camera's exposure would.
+        func apply(stops: Float) {
+            let gain = pow(2, stops)
+            let c0 = PLYPointCloud.shC0
+            buffer.replaceUnsafeMutableBytes { destination in
+                destination.initializeMemory(as: UInt8.self, repeating: 0)
+                let floats = destination.bindMemory(to: Float.self)
+                for i in base.indices {
+                    floats[i] = (gain * (0.5 + c0 * base[i]) - 0.5) / c0
+                }
+            }
+        }
+
+        private static func splatEntity(in entity: Entity) -> Entity? {
+            if entity.components.has(GaussianSplatComponent.self) { return entity }
+            for child in entity.children {
+                if let found = splatEntity(in: child) { return found }
+            }
+            return nil
+        }
+    }
+
+    @MainActor
+    private func makeSplats(limit: Int) throws -> Entity {
+        let cloud = count > limit ? keepingMostVisible(limit) : self
         return try cloud.makeSplatEntity()
     }
 
@@ -539,9 +586,13 @@ extension PLYPointCloud {
     private func makeSplatEntity() throws -> Entity {
         func descriptor(_ values: [Float], components: Int, format: MTLAttributeFormat) throws -> GaussianSplatResource.BufferDescriptor {
             let size = values.count * MemoryLayout<Float>.stride
-            let buffer = try LowLevelBuffer(descriptor: .init(capacity: size))
+            // RealityKit rejects splat buffers whose size isn't a multiple of
+            // 16 bytes, which three floats a splat often isn't.
+            let capacity = (size + 15) / 16 * 16
+            let buffer = try LowLevelBuffer(descriptor: .init(capacity: capacity))
             buffer.replaceUnsafeMutableBytes { destination in
                 values.withUnsafeBytes { destination.copyMemory(from: $0) }
+                destination[size...].initializeMemory(as: UInt8.self, repeating: 0)
             }
             return .init(buffer: buffer, format: format, stride: components * MemoryLayout<Float>.stride, offset: 0)
         }

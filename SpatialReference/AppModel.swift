@@ -45,6 +45,19 @@ class AppModel {
         return ActiveEnvironment(title: item.title, subtitle: item.subtitle, content: content)
     }
 
+    /// Every environment that can be entered, in the Environments tab's order.
+    var enterableEnvironmentIDs: [String] {
+        ImmersiveEnvironment.catalog.filter(\.isAvailable).map(\.id) + importedEnvironments.items.map(\.id)
+    }
+
+    /// Switches the open environment space to the previous (-1) or next (+1)
+    /// environment, wrapping around.
+    func showAdjacentEnvironment(_ offset: Int) {
+        let ids = enterableEnvironmentIDs
+        guard let current = activeEnvironmentID, let index = ids.firstIndex(of: current), ids.count > 1 else { return }
+        activeEnvironmentID = ids[(index + offset + ids.count) % ids.count]
+    }
+
     var isImmersiveSpaceInTransition: Bool {
         immersiveSpaceState == .inTransition || environmentSpaceState == .inTransition
     }

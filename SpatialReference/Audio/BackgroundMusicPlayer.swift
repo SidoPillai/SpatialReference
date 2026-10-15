@@ -75,6 +75,8 @@ final class BackgroundMusicPlayer {
                 engine.stop()
             }
             guard let wanted, !Task.isCancelled else { return }
+            await Self.configureAudioSession()
+            guard !Task.isCancelled else { return }
             do {
                 try start(wanted)
             } catch {
@@ -93,9 +95,21 @@ final class BackgroundMusicPlayer {
         }
     }
 
+    /// Sets the session category and activates the session off the main thread,
+    /// since doing either while the session is active can block the UI. Activating
+    /// here also keeps `engine.start()` from activating it on the main thread.
+    @concurrent
+    private nonisolated static func configureAudioSession() async {
+        let session = AVAudioSession.sharedInstance()
+        // Skip touching the active session if an earlier start already configured it.
+        if session.category != .ambient || !session.categoryOptions.contains(.mixWithOthers) {
+            // Same category as UISounds: mix with other apps' audio.
+            try? session.setCategory(.ambient, options: [.mixWithOthers])
+        }
+        try? session.setActive(true)
+    }
+
     private func start(_ track: MusicTrack) throws {
-        // Same category as UISounds: mix with other apps' audio.
-        try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
         if let source { engine.detach(source) }
 
         let outputRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
@@ -103,9 +117,9 @@ final class BackgroundMusicPlayer {
         let format = AVAudioFormat(standardFormatWithSampleRate: outputRate > 0 ? outputRate : 48_000, channels: 2)!
         let node = AmbientSynth(track: track, sampleRate: format.sampleRate).makeSourceNode(format: format)
         engine.attach(node)
-        engine.connect(node, to: reverb, format: format)
-        engine.connect(reverb, to: duckMixer, format: format)
-        engine.connect(duckMixer, to: engine.mainMixerNode, format: format)
+        try engine.connectNode(node, to: reverb, format: format)
+        try engine.connectNode(reverb, to: duckMixer, format: format)
+        try engine.connectNode(duckMixer, to: engine.mainMixerNode, format: format)
         reverb.loadFactoryPreset(track.reverb)
         reverb.wetDryMix = track.reverbMix
         engine.mainMixerNode.outputVolume = 0

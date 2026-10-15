@@ -5,16 +5,14 @@
 
 import SwiftUI
 
-/// How a visitor gets into an exhibition, shown as the pill under its title.
+/// Whether a visitor can still claim an exhibition, shown as the pill under its title.
 enum Admission {
-    case free, price(Double), ticketed
+    case available, claimed
 
     var badge: CardBadge {
         switch self {
-        case .free: CardBadge(text: "Admission: Free", systemImage: "qrcode", filled: true)
-        case .price(let amount):
-            CardBadge(text: "Admission: \(amount.formatted(.currency(code: "USD")))", systemImage: "qrcode", filled: true)
-        case .ticketed: CardBadge(text: "Ticketed", systemImage: "checkmark.seal")
+        case .available: CardBadge(text: "Available", systemImage: "qrcode", filled: true)
+        case .claimed: CardBadge(text: "Claimed", systemImage: "checkmark.seal")
         }
     }
 }
@@ -39,7 +37,7 @@ struct Exhibition: Identifiable {
     let location: String
     let kind: ExhibitionKind
     let summary: String
-    var admission = Admission.ticketed
+    var admission = Admission.available
     var tag: CardTag?
     var immersive = false
     var has3D = false
@@ -65,7 +63,7 @@ struct Exhibition: Identifiable {
         Exhibition(
             title: "Pyramids of Giza", venue: "Giza Necropolis", location: "Giza, Egypt", kind: .ancient,
             summary: "Walk the causeway to the Great Pyramid of Khufu, then climb inside to the King’s Chamber as it stood 4,500 years ago.",
-            admission: .price(5.99), tag: .new, immersive: true, has3D: true, narrated: true,
+            tag: .new, immersive: true, has3D: true, narrated: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0xF4C98A), Color(hex: 0xE09A55), Color(hex: 0xA8602C)],
                 startPoint: .top, endPoint: .bottom)),
@@ -75,7 +73,7 @@ struct Exhibition: Identifiable {
         Exhibition(
             title: "Smithsonian: Flight", venue: "National Air and Space Museum", location: "Washington, DC", kind: .science,
             summary: "From the Wright Flyer to the Apollo 11 command module, see the machines that carried us off the ground and into orbit.",
-            admission: .free, tag: .updated, immersive: true, has3D: true, images: 24, narrated: true,
+            tag: .updated, immersive: true, has3D: true, images: 24, narrated: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x8EC3F0), Color(hex: 0x3D7DC4), Color(hex: 0x173A6B)],
                 startPoint: .top, endPoint: .bottom)),
@@ -85,7 +83,7 @@ struct Exhibition: Identifiable {
         Exhibition(
             title: "The Met: Temple of Dendur", venue: "The Metropolitan Museum of Art", location: "New York, NY", kind: .art,
             summary: "Stand in the Sackler Wing beside a Roman-era Egyptian temple, rebuilt stone by stone on the banks of Central Park.",
-            admission: .ticketed, tag: .new, immersive: true, images: 18, narrated: true,
+            admission: .claimed, tag: .new, immersive: true, images: 18, narrated: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0xD9CBB4), Color(hex: 0x9C8668), Color(hex: 0x4F4232)],
                 startPoint: .top, endPoint: .bottom)),
@@ -95,7 +93,7 @@ struct Exhibition: Identifiable {
         Exhibition(
             title: "MoPOP: Guitar Gallery", venue: "Museum of Pop Culture", location: "Seattle, WA", kind: .music,
             summary: "Circle the 500-instrument sculpture at the heart of Frank Gehry’s building and hear the riffs that shaped rock ’n’ roll.",
-            admission: .price(4.99), tag: .updated, immersive: true, has3D: true, narrated: true,
+            tag: .updated, immersive: true, has3D: true, narrated: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0xE0457B), Color(hex: 0x7B2FBF), Color(hex: 0x23145A)],
                 startPoint: .topLeading, endPoint: .bottomTrailing)),
@@ -105,7 +103,7 @@ struct Exhibition: Identifiable {
         Exhibition(
             title: "The Louvre: Grand Gallery", venue: "Musée du Louvre", location: "Paris, France", kind: .art,
             summary: "Stroll the Grande Galerie at closing time, with the Renaissance masters to yourself and a curator in your ear.",
-            admission: .ticketed, immersive: true, images: 32, narrated: true,
+            admission: .claimed, immersive: true, images: 32, narrated: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x6B4A2E), Color(hex: 0x3A2717), Color(hex: 0x1C130B)],
                 startPoint: .top, endPoint: .bottom)),
@@ -115,7 +113,7 @@ struct Exhibition: Identifiable {
         Exhibition(
             title: "Natural History: Fossils", venue: "Smithsonian National Museum of Natural History", location: "Washington, DC", kind: .science,
             summary: "Meet a full-scale T. rex in the Hall of Fossils and turn 3D-scanned specimens over in your own hands.",
-            admission: .free, tag: .new, has3D: true, images: 12, narrated: true,
+            tag: .new, has3D: true, images: 12, narrated: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x6E7F5A), Color(hex: 0x3E4A30), Color(hex: 0x1F2618)],
                 startPoint: .top, endPoint: .bottom)),
@@ -125,7 +123,7 @@ struct Exhibition: Identifiable {
         Exhibition(
             title: "Terracotta Army", venue: "Mausoleum of the First Qin Emperor", location: "Xi’an, China", kind: .ancient,
             summary: "Descend into Pit 1 and walk the ranks of 8,000 clay soldiers, each with a face of its own.",
-            admission: .price(3.99), immersive: true, has3D: true, images: 9,
+            immersive: true, has3D: true, images: 9,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0xC48A62), Color(hex: 0x8C5636), Color(hex: 0x4A2A18)],
                 startPoint: .top, endPoint: .bottom)),
@@ -135,7 +133,7 @@ struct Exhibition: Identifiable {
         Exhibition(
             title: "Abbey Road Sessions", venue: "Abbey Road Studios", location: "London, UK", kind: .music,
             summary: "Sit at the console in Studio Two and pull the faders on the multitrack recordings that defined a decade.",
-            admission: .ticketed, tag: .updated, immersive: true, images: 15, narrated: true,
+            admission: .claimed, tag: .updated, immersive: true, images: 15, narrated: true,
             art: AnyShapeStyle(LinearGradient(
                 colors: [Color(hex: 0x2F3B4C), Color(hex: 0x1A2230), Color(hex: 0x0D1118)],
                 startPoint: .top, endPoint: .bottom)),

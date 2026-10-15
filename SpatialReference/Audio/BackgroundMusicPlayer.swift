@@ -7,8 +7,9 @@ import AVFoundation
 
 /// Plays the ambient background music chosen in Settings.
 ///
-/// Music fades in on launch, fades out while the app is in the background,
-/// softens while narration speaks, and fades out then in on a track change.
+/// Music fades in on launch, fades out while the app is in the background or
+/// an item is open, softens while narration speaks, and fades out then in on
+/// a track change.
 final class BackgroundMusicPlayer {
     private let engine = AVAudioEngine()
     private let reverb = AVAudioUnitReverb()
@@ -19,6 +20,7 @@ final class BackgroundMusicPlayer {
     /// The track that is playing or fading in; nil when stopped or stopping.
     private var playingTrackID: String?
     private var isAppActive = false
+    private var isViewingItem = false
     private var transition: Task<Void, Never>?
     private var duckFade: Task<Void, Never>?
     private var configurationObserver: (any NSObjectProtocol)?
@@ -54,9 +56,15 @@ final class BackgroundMusicPlayer {
         refresh()
     }
 
+    /// Pauses the music while an item is open.
+    func setViewingItem(_ viewing: Bool) {
+        isViewingItem = viewing
+        refresh()
+    }
+
     /// Starts, stops or switches tracks to match Settings.
     func refresh() {
-        let wanted = isAppActive && isEnabled ? selectedTrack : nil
+        let wanted = isAppActive && !isViewingItem && isEnabled ? selectedTrack : nil
         guard wanted?.id != playingTrackID else { return }
         playingTrackID = wanted?.id
         transition?.cancel()

@@ -32,6 +32,9 @@ struct SpatialReferenceApp: App {
             .onChange(of: scenePhase, initial: true) { _, phase in
                 appModel.backgroundMusic.setAppActive(phase != .background)
             }
+            .onChange(of: appModel.screen == .browser, initial: true) { _, viewing in
+                appModel.backgroundMusic.setViewingItem(viewing)
+            }
             .onChange(of: appModel.narrationPlayer.isSpeaking && !appModel.narrationPlayer.isPaused) { _, speaking in
                 appModel.backgroundMusic.setDucked(speaking)
             }

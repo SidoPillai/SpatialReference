@@ -5,6 +5,7 @@
 //  Created by Siddesh Pillai on 9/28/26.
 //
 
+import CompositorServices
 import SwiftUI
 
 /// Maintains app-wide state
@@ -15,6 +16,10 @@ class AppModel {
     let teleportPortalWindowID = "TeleportPortal"
     let tourModelWindowID = "TourModel"
     let environmentSpaceID = "EnvironmentSpace"
+    /// Shows `.ply` splat captures life size with `SplatRenderer`, on device.
+    let splatSpaceID = "SplatSpace"
+    /// The splat space's floating toolbar, which a Metal layer can't host.
+    let splatControlsWindowID = "SplatControls"
     enum ImmersiveSpaceState {
         case closed
         case inTransition
@@ -24,6 +29,12 @@ class AppModel {
     var immersiveSpaceState = ImmersiveSpaceState.closed
     /// The environment immersive space, showing `activeEnvironment`.
     var environmentSpaceState = ImmersiveSpaceState.closed
+    /// The splat space, showing `activeEnvironment` when it's a `.ply`.
+    var splatSpaceState = ImmersiveSpaceState.closed
+    /// Bumped each time the splat space opens, so a late close from an
+    /// earlier one is ignored.
+    private var splatSpaceSession = 0
+    let splatViewer = SplatViewer()
     var activeEnvironmentID: String?
     /// 360° images and 3D models the user added from Files.
     let importedEnvironments = ImportedEnvironmentStore()
@@ -31,7 +42,10 @@ class AppModel {
     /// What the environment space shows: a catalog panorama, or an imported
     /// panorama or model.
     var activeEnvironment: ActiveEnvironment? {
-        guard let id = activeEnvironmentID else { return nil }
+        activeEnvironmentID.flatMap(environment(id:))
+    }
+
+    func environment(id: String) -> ActiveEnvironment? {
         if let env = ImmersiveEnvironment.catalog.first(where: { $0.id == id }), let panorama = env.panorama {
             return ActiveEnvironment(title: env.title, subtitle: env.location, content: .bundledPanorama(panorama))
         }
@@ -50,16 +64,92 @@ class AppModel {
         ImmersiveEnvironment.catalog.filter(\.isAvailable).map(\.id) + importedEnvironments.items.map(\.id)
     }
 
-    /// Switches the open environment space to the previous (-1) or next (+1)
-    /// environment, wrapping around.
-    func showAdjacentEnvironment(_ offset: Int) {
+    /// The immersive space that shows an environment: splat captures get the
+    /// Metal splat space on device, everything else the RealityKit one.
+    func spaceID(for environment: ActiveEnvironment) -> String {
+        if case .pointCloud = environment.content, SplatViewer.isSupported { return splatSpaceID }
+        return environmentSpaceID
+    }
+
+    /// What opening and closing spaces needs from the calling view.
+    struct SpaceActions {
+        let openSpace: OpenImmersiveSpaceAction
+        let dismissSpace: DismissImmersiveSpaceAction
+        let openWindow: OpenWindowAction
+    }
+
+    /// Shows an environment, opening the space it needs and closing any
+    /// other; within the same space it just swaps the content.
+    func enterEnvironment(_ id: String, using actions: SpaceActions) async {
+        guard let target = environment(id: id) else { return }
+        let space = spaceID(for: target)
+        if let current = activeEnvironment, spaceID(for: current) == space, state(of: space) == .open {
+            activeEnvironmentID = id
+            return
+        }
+        // Closes the asset viewer or another environment first.
+        await dismissOpenImmersiveSpace(using: actions.dismissSpace)
+        activeEnvironmentID = id
+        setState(.inTransition, of: space)
+        if space == splatSpaceID { splatSpaceSession += 1 }
+        switch await actions.openSpace(id: space) {
+        case .opened:
+            // The RealityKit space's onAppear marks it open; a Metal layer
+            // has no such hook.
+            if space == splatSpaceID {
+                splatSpaceState = .open
+                actions.openWindow(id: splatControlsWindowID)
+            }
+        case .userCancelled, .error:
+            fallthrough
+        @unknown default:
+            setState(.closed, of: space)
+            activeEnvironmentID = nil
+        }
+    }
+
+    /// Steps the open environment to the previous (-1) or next (+1) one,
+    /// wrapping around.
+    func showAdjacentEnvironment(_ offset: Int, using actions: SpaceActions) async {
         let ids = enterableEnvironmentIDs
         guard let current = activeEnvironmentID, let index = ids.firstIndex(of: current), ids.count > 1 else { return }
-        activeEnvironmentID = ids[(index + offset + ids.count) % ids.count]
+        await enterEnvironment(ids[(index + offset + ids.count) % ids.count], using: actions)
+    }
+
+    /// Draws into a newly opened splat space's layer.
+    func startSplatLayer(_ layerRenderer: LayerRenderer) {
+        let session = splatSpaceSession
+        splatViewer.start(layerRenderer) { [weak self] in
+            // The system can close the space itself, such as from the Digital Crown.
+            guard let self, session == splatSpaceSession, splatSpaceState != .closed else { return }
+            splatSpaceClosed()
+        }
+    }
+
+    private func splatSpaceClosed() {
+        splatSpaceState = .closed
+        activeEnvironmentID = nil
+        splatViewer.unload()
+    }
+
+    private func state(of space: String) -> ImmersiveSpaceState {
+        switch space {
+        case splatSpaceID: splatSpaceState
+        case environmentSpaceID: environmentSpaceState
+        default: immersiveSpaceState
+        }
+    }
+
+    private func setState(_ state: ImmersiveSpaceState, of space: String) {
+        switch space {
+        case splatSpaceID: splatSpaceState = state
+        case environmentSpaceID: environmentSpaceState = state
+        default: immersiveSpaceState = state
+        }
     }
 
     var isImmersiveSpaceInTransition: Bool {
-        immersiveSpaceState == .inTransition || environmentSpaceState == .inTransition
+        immersiveSpaceState == .inTransition || environmentSpaceState == .inTransition || splatSpaceState == .inTransition
     }
 
     /// visionOS shows one immersive space at a time, so opening one first
@@ -69,6 +159,11 @@ class AppModel {
             immersiveSpaceState = .inTransition
         } else if environmentSpaceState == .open {
             environmentSpaceState = .inTransition
+        } else if splatSpaceState == .open {
+            splatSpaceState = .inTransition
+            await dismiss()
+            splatSpaceClosed()
+            return
         } else {
             return
         }

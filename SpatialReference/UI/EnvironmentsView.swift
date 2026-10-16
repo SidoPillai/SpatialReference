@@ -59,6 +59,7 @@ struct EnvironmentsView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    @Environment(\.openWindow) private var openWindow
 
     @State private var selected: String?
     @State private var isImporting = false
@@ -360,19 +361,6 @@ struct EnvironmentsView: View {
             await appModel.dismissOpenImmersiveSpace(using: dismissImmersiveSpace)
             return
         }
-        // Closes the asset viewer or another environment first.
-        await appModel.dismissOpenImmersiveSpace(using: dismissImmersiveSpace)
-        appModel.activeEnvironmentID = id
-        appModel.environmentSpaceState = .inTransition
-        switch await openImmersiveSpace(id: appModel.environmentSpaceID) {
-        case .opened:
-            // The space's onAppear marks it open.
-            break
-        case .userCancelled, .error:
-            fallthrough
-        @unknown default:
-            appModel.environmentSpaceState = .closed
-            appModel.activeEnvironmentID = nil
-        }
+        await appModel.enterEnvironment(id, using: .init(openSpace: openImmersiveSpace, dismissSpace: dismissImmersiveSpace, openWindow: openWindow))
     }
 }

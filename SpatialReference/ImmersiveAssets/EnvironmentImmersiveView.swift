@@ -46,8 +46,8 @@ struct EnvironmentImmersiveView: View {
 
     @Environment(AppModel.self) private var appModel
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
-    @AppStorage(SettingsKey.backgroundMusic) private var backgroundMusic = true
-    @AppStorage(SettingsKey.backgroundMusicTrack) private var backgroundMusicTrack = MusicTrack.defaultID
+    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    @Environment(\.openWindow) private var openWindow
 
     @State private var root = Entity()
     /// Holds the toolbar; placed in front of the viewer when content loads.
@@ -88,7 +88,6 @@ struct EnvironmentImmersiveView: View {
     /// A splat renderer budget: above roughly this many splats, visionOS
     /// reports rendering as limited and draws nothing.
     private static let splatBudget = 200_000
-    private static let exposureRange: ClosedRange<Float> = -2...2
 
     private static let log = Logger(subsystem: "com.esri.storymaps.SpatialReference", category: "Environments")
 
@@ -404,12 +403,7 @@ struct EnvironmentImmersiveView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
             }
             if let status {
-                Label(status.text, systemImage: status.symbol)
-                    .font(.system(size: 14, weight: .medium))
-                    .lineLimit(2)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .glassBackgroundEffect(in: Capsule())
+                EnvironmentToolbar.status(status.text, systemImage: status.symbol)
             }
             HStack(spacing: 4) {
                 toolButton("Close", systemImage: "xmark") {
@@ -417,10 +411,10 @@ struct EnvironmentImmersiveView: View {
                 }
                 .disabled(appModel.isImmersiveSpaceInTransition)
                 divider
-                toolButton("Previous", systemImage: "chevron.left") { appModel.showAdjacentEnvironment(-1) }
-                    .disabled(appModel.enterableEnvironmentIDs.count < 2)
-                toolButton("Next", systemImage: "chevron.right") { appModel.showAdjacentEnvironment(1) }
-                    .disabled(appModel.enterableEnvironmentIDs.count < 2)
+                toolButton("Previous", systemImage: "chevron.left") { step(-1) }
+                    .disabled(appModel.enterableEnvironmentIDs.count < 2 || appModel.isImmersiveSpaceInTransition)
+                toolButton("Next", systemImage: "chevron.right") { step(1) }
+                    .disabled(appModel.enterableEnvironmentIDs.count < 2 || appModel.isImmersiveSpaceInTransition)
                 divider
                 toolButton("Reset", systemImage: "arrow.counterclockwise") { reset() }
                 toolButton("Turn", systemImage: "rotate.right") { turn() }
@@ -443,11 +437,14 @@ struct EnvironmentImmersiveView: View {
         return nil
     }
 
-    private var divider: some View {
-        Rectangle()
-            .fill(.white.opacity(0.2))
-            .frame(width: 1, height: 24)
-            .padding(.horizontal, 4)
+    private var divider: some View { EnvironmentToolbar.divider }
+
+    /// Steps to the previous or next environment, which may open the splat
+    /// space instead of this one.
+    private func step(_ offset: Int) {
+        Task {
+            await appModel.showAdjacentEnvironment(offset, using: .init(openSpace: openImmersiveSpace, dismissSpace: dismissImmersiveSpace, openWindow: openWindow))
+        }
     }
 
     private func toggle(_ card: ToolbarCard) {
@@ -455,86 +452,19 @@ struct EnvironmentImmersiveView: View {
     }
 
     private func toolButton(_ title: String, systemImage: String, isOn: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 19, weight: .semibold))
-                .frame(width: 48, height: 48)
-                .background(isOn ? AnyShapeStyle(.white.opacity(0.25)) : AnyShapeStyle(.clear), in: Circle())
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .hoverEffect()
-        .help(title)
-        .accessibilityLabel(title)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
+        EnvironmentToolbar.button(title, systemImage: systemImage, isOn: isOn, action: action)
     }
 
-    @ViewBuilder
     private func card(_ card: ToolbarCard) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        EnvironmentToolbar.card {
             switch card {
-            case .exposure: exposureCard
-            case .music: musicCard
-            case .info: infoCard
-            }
-        }
-        .padding(22)
-        .frame(width: 420, alignment: .leading)
-        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 28))
-    }
-
-    private var exposureCard: some View {
-        Group {
-            HStack {
-                Text("Exposure").font(.headline)
-                Spacer()
-                Text(exposure, format: .number.precision(.fractionLength(1)).sign(strategy: .always(includingZero: false)))
-                    .font(.system(size: 15, weight: .medium).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                Button("Reset") { exposure = 0 }
-                    .disabled(exposure == 0)
-            }
-            Slider(value: $exposure, in: Self.exposureRange, step: 0.1) {
-                Text("Exposure")
-            } minimumValueLabel: {
-                Image(systemName: "sun.min")
-            } maximumValueLabel: {
-                Image(systemName: "sun.max.fill")
-            }
-            .onChange(of: exposure) {
-                Task { await applyExposure() }
-            }
-        }
-    }
-
-    private var musicCard: some View {
-        Group {
-            Toggle("Background Music", isOn: $backgroundMusic)
-                .font(.headline)
-                .onChange(of: backgroundMusic) { appModel.backgroundMusic.refresh() }
-            VStack(spacing: 2) {
-                ForEach(MusicTrack.catalog) { track in
-                    Button {
-                        backgroundMusicTrack = track.id
-                        backgroundMusic = true
-                        appModel.backgroundMusic.refresh()
-                    } label: {
-                        HStack {
-                            Image(systemName: "music.note")
-                                .foregroundStyle(.secondary)
-                            Text(track.title)
-                            Spacer()
-                            if backgroundMusic, track.id == backgroundMusicTrack {
-                                Image(systemName: "speaker.wave.2.fill")
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .frame(height: 40)
-                        .contentShape(RoundedRectangle(cornerRadius: 12))
+            case .exposure:
+                ExposureCard(exposure: $exposure)
+                    .onChange(of: exposure) {
+                        Task { await applyExposure() }
                     }
-                    .buttonStyle(.plain)
-                    .hoverEffect()
-                }
+            case .music: BackgroundMusicCard()
+            case .info: infoCard
             }
         }
     }

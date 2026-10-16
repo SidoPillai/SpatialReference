@@ -5,6 +5,7 @@
 //  Created by Siddesh Pillai on 9/28/26.
 //
 
+import CompositorServices
 import SwiftUI
 
 @main
@@ -27,6 +28,9 @@ struct SpatialReferenceApp: App {
                     StoryBrowserView()
                 }
             }
+            #if DEBUG
+            .modifier(SplatAutoOpen())
+            #endif
             .environment(appModel)
             .task { await appModel.restoreSession() }
             .onChange(of: scenePhase, initial: true) { _, phase in
@@ -77,7 +81,10 @@ struct SpatialReferenceApp: App {
                 }
                 .onDisappear {
                     appModel.environmentSpaceState = .closed
-                    appModel.activeEnvironmentID = nil
+                    // Unless it's already moved on to a splat capture.
+                    if let env = appModel.activeEnvironment, appModel.spaceID(for: env) == appModel.environmentSpaceID {
+                        appModel.activeEnvironmentID = nil
+                    }
                 }
         }
         // Panoramas are progressive: the Digital Crown dials them from a
@@ -87,5 +94,28 @@ struct SpatialReferenceApp: App {
             get: { appModel.activeEnvironment?.isModel == true ? MixedImmersionStyle() as any ImmersionStyle : ProgressiveImmersionStyle() },
             set: { _ in }
         ), in: .mixed, .progressive)
+
+        // Splat captures, life size and drawn with Metal, in the room.
+        ImmersiveSpace(id: appModel.splatSpaceID) {
+            CompositorLayer(configuration: SplatLayerConfiguration()) { layerRenderer in
+                appModel.startSplatLayer(layerRenderer)
+            }
+        }
+        .immersionStyle(selection: .constant(.mixed), in: .mixed)
+
+        WindowGroup(id: appModel.splatControlsWindowID) {
+            SplatControlsView()
+                .environment(appModel)
+        }
+        .windowStyle(.plain)
+        .windowResizability(.contentSize)
+        .defaultWindowPlacement { _, _ in
+            WindowPlacement(.utilityPanel)
+        }
+        // It only makes sense with the splat space open, which never comes
+        // back on relaunch; otherwise it reopens alone, empty, and hides the
+        // main window.
+        .restorationBehavior(.disabled)
+        .defaultLaunchBehavior(.suppressed)
     }
 }

@@ -25,8 +25,9 @@ struct StoryBrowserView: View {
 
             VStack(spacing: 24) {
                 panel
-                // A tour has its own per-stop audio controls.
-                if !isTour {
+                // A tour has its own per-stop audio controls; 360° images
+                // have no narration.
+                if !isTour && !isImage360 {
                     narrationBar
                 }
             }
@@ -47,6 +48,13 @@ struct StoryBrowserView: View {
         .onChange(of: appModel.currentChapterIndex) {
             player.stop()
         }
+        // Stepping through 360° images from inside one can cross into
+        // another chapter's; the window follows along.
+        .onChange(of: appModel.activeEnvironmentID) { _, id in
+            if let id, let index = appModel.chapterIndex(ofEnvironment: id) {
+                appModel.currentChapterIndex = index
+            }
+        }
         .onDisappear {
             player.stop()
         }
@@ -64,6 +72,10 @@ struct StoryBrowserView: View {
                     .frame(maxHeight: .infinity)
             } else if let chapter = appModel.currentChapter, let story = appModel.story, case .tour(let stops, let isThreeD) = chapter.media {
                 TourView(itemID: story.itemID, stops: stops, isThreeD: isThreeD)
+                    .id(chapter.id)
+                    .frame(maxHeight: .infinity)
+            } else if let chapter = appModel.currentChapter, let story = appModel.story, case .image360(let images) = chapter.media {
+                Image360SequenceView(itemID: story.itemID, images: images)
                     .id(chapter.id)
                     .frame(maxHeight: .infinity)
             } else if let chapter = appModel.currentChapter {
@@ -134,8 +146,10 @@ struct StoryBrowserView: View {
             }
             Spacer()
 
-            circleButton(isBookmarked ? "Remove bookmark" : "Bookmark", systemImage: isBookmarked ? "bookmark.fill" : "bookmark") {
-                isBookmarked.toggle()
+            if !isImage360 {
+                circleButton(isBookmarked ? "Remove bookmark" : "Bookmark", systemImage: isBookmarked ? "bookmark.fill" : "bookmark") {
+                    isBookmarked.toggle()
+                }
             }
             chaptersMenu
         }
@@ -202,6 +216,9 @@ struct StoryBrowserView: View {
         case .tour(let stops, _):
             // Tours are shown as a map and stop panel in the main panel instead.
             mediaCardBody(badge: "Tour", title: "\(stops.count) stops", subtitle: nil, actionTitle: nil, actionIcon: nil)
+        case .image360(let images):
+            // 360° images are shown as a sequence in the main panel instead.
+            mediaCardBody(badge: "360°", title: "\(images.count) images", subtitle: nil, actionTitle: nil, actionIcon: nil)
         }
     }
 
@@ -291,6 +308,11 @@ struct StoryBrowserView: View {
 
     private var isTour: Bool {
         if case .tour = appModel.currentChapter?.media { return true }
+        return false
+    }
+
+    private var isImage360: Bool {
+        if case .image360 = appModel.currentChapter?.media { return true }
         return false
     }
 

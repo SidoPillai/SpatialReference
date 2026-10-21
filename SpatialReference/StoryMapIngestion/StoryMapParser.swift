@@ -50,11 +50,14 @@ enum StoryMapParser {
 
         // Walk the story's top-level children in order. "immersive" (sidecar)
         // sections contribute one chapter per slide; gallery blocks
-        // contribute one carousel chapter each.
+        // contribute one carousel chapter each; a run of consecutive 360°
+        // image blocks shares one chapter.
         let topLevelChildren = storyNode["children"] as? [String] ?? []
         var chapters: [Chapter] = []
+        var previousType: String?
         for childID in topLevelChildren {
             guard let node = nodes[childID], let type = node["type"] as? String else { continue }
+            defer { previousType = type }
             switch type {
             case "immersive":
                 let slideIDs = node["children"] as? [String] ?? []
@@ -70,6 +73,13 @@ enum StoryMapParser {
             case "tour":
                 if let media = makeTour(tourNode: node, nodes: nodes, resources: resources) {
                     chapters.append(Chapter(id: childID, narrationText: "", media: media))
+                }
+            case "image360":
+                guard let image = makeImage360(id: childID, node: node, resources: resources) else { continue }
+                if previousType == "image360", case .image360(let images) = chapters.last?.media {
+                    chapters[chapters.count - 1].media = .image360(images: images + [image])
+                } else {
+                    chapters.append(Chapter(id: childID, narrationText: "", media: .image360(images: [image])))
                 }
             default:
                 continue
@@ -209,6 +219,27 @@ enum StoryMapParser {
         }
         guard !stops.isEmpty else { return nil }
         return .tour(stops: stops, isThreeD: mapData?["mode"] as? String == "3d")
+    }
+
+    /// A 360° image block: its `data.image360` points at an `image360` item
+    /// resource carrying the panorama's filename and pixel size.
+    private static func makeImage360(
+        id: String,
+        node: [String: Any],
+        resources: [String: [String: Any]]
+    ) -> Image360? {
+        let data = node["data"] as? [String: Any]
+        let resource = resources[data?["image360"] as? String ?? ""]
+        guard let resourceName = itemResourceName(resource, ofTypes: ["image360"]) else { return nil }
+        let resourceData = resource?["data"] as? [String: Any]
+        let caption = (data?["caption"] as? String).map(plainText).flatMap { $0.isEmpty ? nil : $0 }
+        return Image360(
+            id: id,
+            resourceName: resourceName,
+            caption: caption,
+            width: (resourceData?["width"] as? NSNumber)?.intValue,
+            height: (resourceData?["height"] as? NSNumber)?.intValue
+        )
     }
 
     /// The filename of a resource holding a 3D model. Gallery models are typed

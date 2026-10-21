@@ -33,6 +33,23 @@ enum ChapterMedia: Codable, Equatable {
     /// A StoryMaps guided tour: numbered stops projected on a (usually 3D)
     /// map, each with its own narration audio and media.
     case tour(stops: [TourStop], isThreeD: Bool)
+    /// A run of consecutive StoryMaps 360° image blocks, shown one after the
+    /// other and entered as panoramas around the viewer.
+    case image360(images: [Image360])
+}
+
+/// One StoryMaps 360° image block: an equirectangular photo spanning the full
+/// 360° horizontally. Some cover less than 180° vertically (`width` is more
+/// than twice `height`); those are banded around the horizon.
+struct Image360: Codable, Equatable, Identifiable {
+    /// The image360 node's id.
+    var id: String
+    /// Item-resource filename of the panorama.
+    var resourceName: String
+    var caption: String?
+    /// The panorama's size in pixels, as published by the story.
+    var width: Int?
+    var height: Int?
 }
 
 /// One numbered stop of a guided tour.

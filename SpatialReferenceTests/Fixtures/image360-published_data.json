@@ -1,0 +1,41 @@
+{
+  "root": "n-poyXmI",
+  "nodes": {
+    "n-rAdzyN": { "type": "storycover", "data": { "type": "full", "title": "360 Immersive", "summary": "", "byline": "Siddesh Pillai", "titlePanelVerticalPosition": "top", "titlePanelHorizontalPosition": "start", "titlePanelStyle": "gradient", "backgroundColor": "backgroundColor" } },
+    "n-zw1xbo": { "type": "navigation", "data": { "links": [] }, "config": { "isHidden": true } },
+    "n-iZccut": { "type": "image360", "data": { "image360": "r-o2ZRzu" }, "config": { "size": "full" } },
+    "n-shL0Du": { "type": "image360", "data": { "image360": "r-333xFP" }, "config": { "size": "full" } },
+    "n-QXE3th": { "type": "image360", "data": { "image360": "r-69unAQ" }, "config": { "size": "full" } },
+    "n-fxQRbM": { "type": "image360", "data": { "image360": "r-X7Psxu" }, "config": { "size": "full" } },
+    "n-LDpXuj": { "type": "image360", "data": { "image360": "r-cxqffF" }, "config": { "size": "full" } },
+    "n-8I4iMK": { "type": "image360", "data": { "image360": "r-y5PWYC" }, "config": { "size": "full" } },
+    "n-6egy8S": { "type": "image360", "data": { "image360": "r-6kP1qq" }, "config": { "size": "full" } },
+    "n-o7DvfF": { "type": "image360", "data": { "image360": "r-TtiPbu" }, "config": { "size": "full" } },
+    "n-AnyqX4": { "type": "image360", "data": { "image360": "r-kzI1Gg" }, "config": { "size": "full" } },
+    "n-XSG8GN": { "type": "image360", "data": { "image360": "r-lXiEnU" }, "config": { "size": "full" } },
+    "n-UtLRqs": { "type": "text", "data": { "text": "", "type": "h2" } },
+    "n-Zv4jxI": { "type": "text", "data": { "text": "", "type": "paragraph" } },
+    "n-8JeeLB": { "type": "attribution", "data": { "content": "", "attribution": "" } },
+    "n-ZQ9u5h": { "type": "credits", "config": { "isHidden": true }, "children": ["n-UtLRqs", "n-Zv4jxI", "n-8JeeLB"] },
+    "n-poyXmI": {
+      "type": "story",
+      "data": { "storyTheme": "r-RBsHHf", "metaSettings": { "title": "360 Immersive", "description": "", "imageResourceId": "r-QPM3p1" } },
+      "config": { "coverDate": "first-published", "shouldPushMetaToAGOItemDetails": true },
+      "children": ["n-rAdzyN", "n-zw1xbo", "n-iZccut", "n-shL0Du", "n-QXE3th", "n-fxQRbM", "n-LDpXuj", "n-8I4iMK", "n-6egy8S", "n-o7DvfF", "n-AnyqX4", "n-XSG8GN", "n-ZQ9u5h"]
+    }
+  },
+  "resources": {
+    "r-o2ZRzu": { "type": "image360", "data": { "resourceId": "b132aba1-b190-4200-9a76-81b6eab3a2a2.jpeg", "provider": "item-resource", "height": 2500, "width": 5000 } },
+    "r-333xFP": { "type": "image360", "data": { "resourceId": "9kUceTORVpoiAtCIPnVS5.jpg", "provider": "item-resource", "height": 1709, "width": 4000 } },
+    "r-69unAQ": { "type": "image360", "data": { "resourceId": "f0fe3065-adcd-4186-9de4-6d790f6be0b6.jpeg", "provider": "item-resource", "height": 2111, "width": 5000 } },
+    "r-X7Psxu": { "type": "image360", "data": { "resourceId": "FTBRVERIzN5TWxebH_aR3.jpg", "provider": "item-resource", "height": 2000, "width": 4000 } },
+    "r-cxqffF": { "type": "image360", "data": { "resourceId": "udhzU9RvnukpF6eosUEA8.jpg", "provider": "item-resource", "height": 2000, "width": 4000 } },
+    "r-y5PWYC": { "type": "image360", "data": { "resourceId": "PvZ2iPDb9HEUHYbWwQaTZ.jpg", "provider": "item-resource", "height": 1358, "width": 4000 } },
+    "r-6kP1qq": { "type": "image360", "data": { "resourceId": "YAFOThs0eoowmeo3xMDxN.jpg", "provider": "item-resource", "height": 1664, "width": 3328, "projectionType": "equirectangular" } },
+    "r-TtiPbu": { "type": "image360", "data": { "resourceId": "cM8AiXvZYQtBOJFq1mhQg.jpg", "provider": "item-resource", "height": 1664, "width": 3328, "projectionType": "equirectangular" } },
+    "r-kzI1Gg": { "type": "image360", "data": { "resourceId": "a84XB9MWv4g1qnNXx8FX3.jpg", "provider": "item-resource", "height": 1408, "width": 2816, "projectionType": "equirectangular" } },
+    "r-lXiEnU": { "type": "image360", "data": { "resourceId": "floh0ME8lLyzA8KRko_Xc.jpg", "provider": "item-resource", "height": 1664, "width": 3328, "projectionType": "equirectangular" } },
+    "r-RBsHHf": { "type": "story-theme", "data": { "themeId": "obsidian", "themeBaseVariableOverrides": {} } },
+    "r-QPM3p1": { "type": "image", "data": { "resourceId": "yRHm4NFea2f6vKif6i-XA.jpeg", "provider": "item-resource", "height": 1709, "width": 4000 } }
+  }
+}

@@ -45,9 +45,9 @@ struct SplatControlsView: View {
                 .disabled(appModel.isImmersiveSpaceInTransition)
                 EnvironmentToolbar.divider
                 EnvironmentToolbar.button("Previous", systemImage: "chevron.left") { step(-1) }
-                    .disabled(appModel.enterableEnvironmentIDs.count < 2 || appModel.isImmersiveSpaceInTransition)
+                    .disabled(appModel.steppableEnvironmentIDs.count < 2 || appModel.isImmersiveSpaceInTransition)
                 EnvironmentToolbar.button("Next", systemImage: "chevron.right") { step(1) }
-                    .disabled(appModel.enterableEnvironmentIDs.count < 2 || appModel.isImmersiveSpaceInTransition)
+                    .disabled(appModel.steppableEnvironmentIDs.count < 2 || appModel.isImmersiveSpaceInTransition)
                 EnvironmentToolbar.divider
                 EnvironmentToolbar.button("Recenter", systemImage: "arrow.counterclockwise") { viewer.recenter() }
                 EnvironmentToolbar.button("Turn", systemImage: "rotate.right") { viewer.turn() }

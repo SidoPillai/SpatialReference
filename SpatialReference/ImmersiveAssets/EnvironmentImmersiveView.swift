@@ -6,6 +6,7 @@
 import ARKit
 import CoreGraphics
 import Foundation
+import ImageIO
 import OSLog
 import QuartzCore
 import RealityKit
@@ -16,6 +17,8 @@ struct ActiveEnvironment {
     enum Content {
         case bundledPanorama(String)
         case panorama(URL)
+        /// A story's 360° image, downloaded from the story item on demand.
+        case storyPanorama(itemID: String, Image360)
         case model(URL, isRealityFile: Bool)
         /// A `.ply` Gaussian splat capture or point cloud.
         case pointCloud(URL)
@@ -28,7 +31,7 @@ struct ActiveEnvironment {
     var isModel: Bool {
         switch content {
         case .model, .pointCloud: true
-        case .bundledPanorama, .panorama: false
+        case .bundledPanorama, .panorama, .storyPanorama: false
         }
     }
 }
@@ -137,6 +140,9 @@ struct EnvironmentImmersiveView: View {
                 showSkybox(try await Panorama.texture(named: name))
             case .panorama(let url):
                 showSkybox(try await TextureResource(contentsOf: url))
+            case .storyPanorama(let itemID, let image):
+                let url = try await StoryAssetStore.fileURL(itemID: itemID, resourceName: image.resourceName, session: appModel.arcGISSession)
+                showSkybox(try await Panorama.texture(contentsOf: url))
             case .model(let url, let isRealityFile):
                 let entity = try await Entity(contentsOf: url)
                 Self.addGroundingShadows(to: entity)
@@ -412,9 +418,9 @@ struct EnvironmentImmersiveView: View {
                 .disabled(appModel.isImmersiveSpaceInTransition)
                 divider
                 toolButton("Previous", systemImage: "chevron.left") { step(-1) }
-                    .disabled(appModel.enterableEnvironmentIDs.count < 2 || appModel.isImmersiveSpaceInTransition)
+                    .disabled(appModel.steppableEnvironmentIDs.count < 2 || appModel.isImmersiveSpaceInTransition)
                 toolButton("Next", systemImage: "chevron.right") { step(1) }
-                    .disabled(appModel.enterableEnvironmentIDs.count < 2 || appModel.isImmersiveSpaceInTransition)
+                    .disabled(appModel.steppableEnvironmentIDs.count < 2 || appModel.isImmersiveSpaceInTransition)
                 divider
                 toolButton("Reset", systemImage: "arrow.counterclockwise") { reset() }
                 toolButton("Turn", systemImage: "rotate.right") { turn() }
@@ -537,6 +543,46 @@ enum Panorama {
 
     nonisolated static func hasContent(named name: String) -> Bool {
         bundledURL(named: name) != nil || hasPlaceholder(named: name)
+    }
+
+    /// A texture for a 360° photo. One covering less than 180° vertically
+    /// (wider than 2:1) is banded around the horizon, with its top and bottom
+    /// rows stretched to the poles, rather than stretched over the sphere.
+    static func texture(contentsOf url: URL) async throws -> TextureResource {
+        guard let image = await equirectangularImage(contentsOf: url) else {
+            return try await TextureResource(contentsOf: url)
+        }
+        return try await TextureResource(image: image, options: .init(semantic: .color))
+    }
+
+    /// The photo padded to 2:1, or nil when it already is (or can't be read).
+    @concurrent
+    private nonisolated static func equirectangularImage(contentsOf url: URL) async -> sending CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+        let width = image.width, height = width / 2
+        guard image.height < height - 1 else { return nil }
+        return padToEquirectangular(image, height: height)
+    }
+
+    /// Centers `image` vertically on a canvas `height` tall, smearing its
+    /// edge rows over the bands above and below.
+    nonisolated static func padToEquirectangular(_ image: CGImage, height: Int) -> CGImage? {
+        let width = image.width
+        guard let ctx = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ) else { return nil }
+        // Core Graphics' origin is bottom-left, so the band below is drawn first.
+        let band = CGFloat(height - image.height) / 2
+        if let bottomRow = image.cropping(to: CGRect(x: 0, y: image.height - 1, width: width, height: 1)) {
+            ctx.draw(bottomRow, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: band + 1))
+        }
+        if let topRow = image.cropping(to: CGRect(x: 0, y: 0, width: width, height: 1)) {
+            ctx.draw(topRow, in: CGRect(x: 0, y: band + CGFloat(image.height) - 1, width: CGFloat(width), height: band + 1))
+        }
+        ctx.draw(image, in: CGRect(x: 0, y: band, width: CGFloat(width), height: CGFloat(image.height)))
+        return ctx.makeImage()
     }
 
     static func texture(named name: String) async throws -> TextureResource {

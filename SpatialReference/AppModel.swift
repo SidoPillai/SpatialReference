@@ -46,6 +46,14 @@ class AppModel {
     }
 
     func environment(id: String) -> ActiveEnvironment? {
+        let panoramas = storyPanoramas
+        if let index = panoramas.firstIndex(where: { Self.environmentID(for: $0) == id }), let story {
+            return ActiveEnvironment(
+                title: panoramas[index].caption ?? story.title,
+                subtitle: "360° image \(index + 1) of \(panoramas.count)",
+                content: .storyPanorama(itemID: story.itemID, panoramas[index])
+            )
+        }
         if let env = ImmersiveEnvironment.catalog.first(where: { $0.id == id }), let panorama = env.panorama {
             return ActiveEnvironment(title: env.title, subtitle: env.location, content: .bundledPanorama(panorama))
         }
@@ -62,6 +70,40 @@ class AppModel {
     /// Every environment that can be entered, in the Environments tab's order.
     var enterableEnvironmentIDs: [String] {
         ImmersiveEnvironment.catalog.filter(\.isAvailable).map(\.id) + importedEnvironments.items.map(\.id)
+    }
+
+    /// What the environment toolbar's previous and next buttons step
+    /// through: the open story's 360° images while one is showing, otherwise
+    /// every enterable environment.
+    var steppableEnvironmentIDs: [String] {
+        if let activeEnvironmentID, activeEnvironmentID.hasPrefix(Self.storyPanoramaPrefix) {
+            return storyPanoramas.map(Self.environmentID(for:))
+        }
+        return enterableEnvironmentIDs
+    }
+
+    /// The open story's 360° images, in story order across all its chapters.
+    var storyPanoramas: [Image360] {
+        story?.chapters.flatMap { chapter -> [Image360] in
+            if case .image360(let images) = chapter.media { return images }
+            return []
+        } ?? []
+    }
+
+    private static let storyPanoramaPrefix = "story-360/"
+
+    /// The environment id a story's 360° image is entered by.
+    static func environmentID(for image: Image360) -> String {
+        storyPanoramaPrefix + image.id
+    }
+
+    /// The index of the story chapter holding the 360° image an environment
+    /// id names, or nil when it isn't one of the story's.
+    func chapterIndex(ofEnvironment id: String) -> Int? {
+        story?.chapters.firstIndex { chapter in
+            guard case .image360(let images) = chapter.media else { return false }
+            return images.contains { Self.environmentID(for: $0) == id }
+        }
     }
 
     /// The immersive space that shows an environment: splat captures get the
@@ -111,7 +153,7 @@ class AppModel {
     /// Steps the open environment to the previous (-1) or next (+1) one,
     /// wrapping around.
     func showAdjacentEnvironment(_ offset: Int, using actions: SpaceActions) async {
-        let ids = enterableEnvironmentIDs
+        let ids = steppableEnvironmentIDs
         guard let current = activeEnvironmentID, let index = ids.firstIndex(of: current), ids.count > 1 else { return }
         await enterEnvironment(ids[(index + offset + ids.count) % ids.count], using: actions)
     }
